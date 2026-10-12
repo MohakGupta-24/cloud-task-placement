@@ -1,0 +1,5 @@
+num_nodes,unconstrained_lower_bound_gap_mean,unconstrained_lower_bound_gap_std,iterative_knapsack_dp_gap_mean,iterative_knapsack_dp_gap_std,iterative_knapsack_greedy_gap_mean,iterative_knapsack_greedy_gap_std,spillover_greedy_gap_mean,spillover_greedy_gap_std,random_placement_gap_mean,random_placement_gap_std
+15,0.0,0.0,1.215,1.539,1.165,1.453,1.622,1.767,55.462,8.294
+30,0.0,0.0,1.025,0.951,1.033,0.947,1.527,1.249,46.658,8.512
+50,0.0,0.0,0.933,0.899,0.932,0.902,1.377,1.145,45.71,6.27
+75,0.0,0.0,0.321,0.334,0.315,0.328,0.564,0.471,40.016,5.207
