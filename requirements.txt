@@ -1,0 +1,10 @@
+# Cloud Task Placement - Project Requirements
+# DAA PBL Project (CO1, CO2, CO3)
+
+# Note: All core graph, MST, routing, and DP algorithms are implemented
+# strictly from scratch using standard Python. The libraries below are
+# used exclusively for testing, visualization, and dashboard rendering.
+
+pytest>=8.0.0
+matplotlib>=3.8.0
+plotly>=5.20.0

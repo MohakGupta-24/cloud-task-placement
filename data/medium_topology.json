@@ -1,0 +1,1377 @@
+{
+  "directed": false,
+  "nodes": [
+    {
+      "node_id": 0,
+      "capacity": 355.77,
+      "metadata": {
+        "x": 2.5,
+        "y": 27.5,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 1,
+      "capacity": 189.28,
+      "metadata": {
+        "x": 73.65,
+        "y": 67.67,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 2,
+      "capacity": 456.87,
+      "metadata": {
+        "x": 8.69,
+        "y": 42.19,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 3,
+      "capacity": 111.92,
+      "metadata": {
+        "x": 21.86,
+        "y": 50.54,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 4,
+      "capacity": 110.61,
+      "metadata": {
+        "x": 19.88,
+        "y": 64.99,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 5,
+      "capacity": 317.98,
+      "metadata": {
+        "x": 22.04,
+        "y": 58.93,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 6,
+      "capacity": 423.77,
+      "metadata": {
+        "x": 0.65,
+        "y": 80.58,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 7,
+      "capacity": 379.26,
+      "metadata": {
+        "x": 34.03,
+        "y": 15.55,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 8,
+      "capacity": 482.89,
+      "metadata": {
+        "x": 33.66,
+        "y": 9.27,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 9,
+      "capacity": 138.69,
+      "metadata": {
+        "x": 84.75,
+        "y": 60.37,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 10,
+      "capacity": 422.85,
+      "metadata": {
+        "x": 72.97,
+        "y": 53.62,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 11,
+      "capacity": 489.25,
+      "metadata": {
+        "x": 37.85,
+        "y": 55.2,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 12,
+      "capacity": 431.76,
+      "metadata": {
+        "x": 61.85,
+        "y": 86.17,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 13,
+      "capacity": 330.94,
+      "metadata": {
+        "x": 70.46,
+        "y": 4.58,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 14,
+      "capacity": 191.16,
+      "metadata": {
+        "x": 28.94,
+        "y": 7.98,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 15,
+      "capacity": 193.12,
+      "metadata": {
+        "x": 10.1,
+        "y": 27.8,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 16,
+      "capacity": 354.27,
+      "metadata": {
+        "x": 36.48,
+        "y": 37.02,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 17,
+      "capacity": 183.8,
+      "metadata": {
+        "x": 26.7,
+        "y": 93.67,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 18,
+      "capacity": 359.21,
+      "metadata": {
+        "x": 60.91,
+        "y": 17.11,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 19,
+      "capacity": 391.65,
+      "metadata": {
+        "x": 16.34,
+        "y": 37.95,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 20,
+      "capacity": 495.81,
+      "metadata": {
+        "x": 64.0,
+        "y": 55.69,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 21,
+      "capacity": 373.85,
+      "metadata": {
+        "x": 84.29,
+        "y": 77.6,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 22,
+      "capacity": 191.62,
+      "metadata": {
+        "x": 3.21,
+        "y": 31.55,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 23,
+      "capacity": 207.1,
+      "metadata": {
+        "x": 21.1,
+        "y": 94.29,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 24,
+      "capacity": 450.55,
+      "metadata": {
+        "x": 31.47,
+        "y": 65.54,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 25,
+      "capacity": 258.25,
+      "metadata": {
+        "x": 91.45,
+        "y": 45.89,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 26,
+      "capacity": 205.95,
+      "metadata": {
+        "x": 24.66,
+        "y": 56.14,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 27,
+      "capacity": 205.1,
+      "metadata": {
+        "x": 58.46,
+        "y": 89.78,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 28,
+      "capacity": 259.76,
+      "metadata": {
+        "x": 21.93,
+        "y": 99.75,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 29,
+      "capacity": 303.81,
+      "metadata": {
+        "x": 9.09,
+        "y": 4.71,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 30,
+      "capacity": 143.86,
+      "metadata": {
+        "x": 62.74,
+        "y": 79.21,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 31,
+      "capacity": 268.86,
+      "metadata": {
+        "x": 6.35,
+        "y": 38.16,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 32,
+      "capacity": 498.45,
+      "metadata": {
+        "x": 52.91,
+        "y": 97.11,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 33,
+      "capacity": 444.31,
+      "metadata": {
+        "x": 1.15,
+        "y": 72.07,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 34,
+      "capacity": 372.68,
+      "metadata": {
+        "x": 53.7,
+        "y": 26.68,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 35,
+      "capacity": 356.38,
+      "metadata": {
+        "x": 11.16,
+        "y": 43.48,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 36,
+      "capacity": 281.49,
+      "metadata": {
+        "x": 95.38,
+        "y": 87.59,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 37,
+      "capacity": 205.36,
+      "metadata": {
+        "x": 50.06,
+        "y": 17.87,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 38,
+      "capacity": 465.05,
+      "metadata": {
+        "x": 87.05,
+        "y": 29.84,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 39,
+      "capacity": 355.58,
+      "metadata": {
+        "x": 60.9,
+        "y": 15.28,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 40,
+      "capacity": 405.0,
+      "metadata": {
+        "x": 53.94,
+        "y": 77.86,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 41,
+      "capacity": 312.14,
+      "metadata": {
+        "x": 0.06,
+        "y": 32.42,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 42,
+      "capacity": 107.79,
+      "metadata": {
+        "x": 92.91,
+        "y": 87.87,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 43,
+      "capacity": 432.67,
+      "metadata": {
+        "x": 30.75,
+        "y": 5.79,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 44,
+      "capacity": 451.2,
+      "metadata": {
+        "x": 94.69,
+        "y": 8.57,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 45,
+      "capacity": 294.4,
+      "metadata": {
+        "x": 6.92,
+        "y": 76.06,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 46,
+      "capacity": 406.33,
+      "metadata": {
+        "x": 12.84,
+        "y": 47.53,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 47,
+      "capacity": 319.92,
+      "metadata": {
+        "x": 26.51,
+        "y": 87.24,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 48,
+      "capacity": 269.26,
+      "metadata": {
+        "x": 21.18,
+        "y": 53.93,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 49,
+      "capacity": 391.97,
+      "metadata": {
+        "x": 20.12,
+        "y": 31.17,
+        "region": "region_4"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "u": 0,
+      "v": 14,
+      "latency": 67.64
+    },
+    {
+      "u": 0,
+      "v": 29,
+      "latency": 7.85
+    },
+    {
+      "u": 0,
+      "v": 32,
+      "latency": 3.37
+    },
+    {
+      "u": 0,
+      "v": 38,
+      "latency": 58.71
+    },
+    {
+      "u": 0,
+      "v": 45,
+      "latency": 8.43
+    },
+    {
+      "u": 0,
+      "v": 47,
+      "latency": 31.26
+    },
+    {
+      "u": 1,
+      "v": 11,
+      "latency": 61.12
+    },
+    {
+      "u": 1,
+      "v": 16,
+      "latency": 62.86
+    },
+    {
+      "u": 1,
+      "v": 23,
+      "latency": 50.32
+    },
+    {
+      "u": 1,
+      "v": 41,
+      "latency": 21.86
+    },
+    {
+      "u": 2,
+      "v": 4,
+      "latency": 40.16
+    },
+    {
+      "u": 2,
+      "v": 7,
+      "latency": 2.45
+    },
+    {
+      "u": 2,
+      "v": 9,
+      "latency": 6.15
+    },
+    {
+      "u": 2,
+      "v": 12,
+      "latency": 17.42
+    },
+    {
+      "u": 2,
+      "v": 20,
+      "latency": 29.01
+    },
+    {
+      "u": 2,
+      "v": 23,
+      "latency": 2.56
+    },
+    {
+      "u": 2,
+      "v": 24,
+      "latency": 74.07
+    },
+    {
+      "u": 2,
+      "v": 42,
+      "latency": 5.84
+    },
+    {
+      "u": 2,
+      "v": 43,
+      "latency": 5.09
+    },
+    {
+      "u": 2,
+      "v": 44,
+      "latency": 24.11
+    },
+    {
+      "u": 3,
+      "v": 25,
+      "latency": 26.31
+    },
+    {
+      "u": 3,
+      "v": 33,
+      "latency": 16.91
+    },
+    {
+      "u": 3,
+      "v": 47,
+      "latency": 46.65
+    },
+    {
+      "u": 3,
+      "v": 48,
+      "latency": 64.91
+    },
+    {
+      "u": 4,
+      "v": 22,
+      "latency": 62.83
+    },
+    {
+      "u": 4,
+      "v": 27,
+      "latency": 34.83
+    },
+    {
+      "u": 4,
+      "v": 28,
+      "latency": 54.68
+    },
+    {
+      "u": 4,
+      "v": 34,
+      "latency": 58.42
+    },
+    {
+      "u": 4,
+      "v": 35,
+      "latency": 57.47
+    },
+    {
+      "u": 4,
+      "v": 36,
+      "latency": 37.52
+    },
+    {
+      "u": 5,
+      "v": 12,
+      "latency": 32.6
+    },
+    {
+      "u": 5,
+      "v": 13,
+      "latency": 6.17
+    },
+    {
+      "u": 5,
+      "v": 22,
+      "latency": 27.07
+    },
+    {
+      "u": 5,
+      "v": 42,
+      "latency": 34.27
+    },
+    {
+      "u": 6,
+      "v": 24,
+      "latency": 4.24
+    },
+    {
+      "u": 6,
+      "v": 26,
+      "latency": 44.99
+    },
+    {
+      "u": 6,
+      "v": 32,
+      "latency": 19.97
+    },
+    {
+      "u": 6,
+      "v": 47,
+      "latency": 54.15
+    },
+    {
+      "u": 7,
+      "v": 16,
+      "latency": 17.7
+    },
+    {
+      "u": 7,
+      "v": 48,
+      "latency": 70.13
+    },
+    {
+      "u": 7,
+      "v": 49,
+      "latency": 26.78
+    },
+    {
+      "u": 8,
+      "v": 14,
+      "latency": 7.26
+    },
+    {
+      "u": 8,
+      "v": 30,
+      "latency": 10.32
+    },
+    {
+      "u": 8,
+      "v": 31,
+      "latency": 29.76
+    },
+    {
+      "u": 8,
+      "v": 33,
+      "latency": 39.27
+    },
+    {
+      "u": 8,
+      "v": 38,
+      "latency": 57.11
+    },
+    {
+      "u": 8,
+      "v": 40,
+      "latency": 49.58
+    },
+    {
+      "u": 8,
+      "v": 49,
+      "latency": 72.72
+    },
+    {
+      "u": 9,
+      "v": 18,
+      "latency": 66.19
+    },
+    {
+      "u": 9,
+      "v": 27,
+      "latency": 53.36
+    },
+    {
+      "u": 9,
+      "v": 33,
+      "latency": 2.56
+    },
+    {
+      "u": 9,
+      "v": 40,
+      "latency": 47.79
+    },
+    {
+      "u": 10,
+      "v": 13,
+      "latency": 63.65
+    },
+    {
+      "u": 10,
+      "v": 16,
+      "latency": 66.3
+    },
+    {
+      "u": 10,
+      "v": 24,
+      "latency": 48.22
+    },
+    {
+      "u": 10,
+      "v": 27,
+      "latency": 53.37
+    },
+    {
+      "u": 10,
+      "v": 37,
+      "latency": 30.85
+    },
+    {
+      "u": 10,
+      "v": 48,
+      "latency": 10.31
+    },
+    {
+      "u": 11,
+      "v": 20,
+      "latency": 72.14
+    },
+    {
+      "u": 11,
+      "v": 28,
+      "latency": 55.1
+    },
+    {
+      "u": 11,
+      "v": 31,
+      "latency": 30.89
+    },
+    {
+      "u": 11,
+      "v": 36,
+      "latency": 43.21
+    },
+    {
+      "u": 11,
+      "v": 37,
+      "latency": 12.69
+    },
+    {
+      "u": 11,
+      "v": 38,
+      "latency": 51.29
+    },
+    {
+      "u": 11,
+      "v": 45,
+      "latency": 44.28
+    },
+    {
+      "u": 11,
+      "v": 47,
+      "latency": 10.75
+    },
+    {
+      "u": 12,
+      "v": 17,
+      "latency": 74.89
+    },
+    {
+      "u": 12,
+      "v": 20,
+      "latency": 57.5
+    },
+    {
+      "u": 12,
+      "v": 35,
+      "latency": 26.89
+    },
+    {
+      "u": 12,
+      "v": 37,
+      "latency": 5.32
+    },
+    {
+      "u": 12,
+      "v": 43,
+      "latency": 14.83
+    },
+    {
+      "u": 12,
+      "v": 49,
+      "latency": 40.25
+    },
+    {
+      "u": 13,
+      "v": 14,
+      "latency": 34.77
+    },
+    {
+      "u": 13,
+      "v": 19,
+      "latency": 19.42
+    },
+    {
+      "u": 13,
+      "v": 22,
+      "latency": 51.03
+    },
+    {
+      "u": 13,
+      "v": 24,
+      "latency": 49.74
+    },
+    {
+      "u": 13,
+      "v": 29,
+      "latency": 45.44
+    },
+    {
+      "u": 13,
+      "v": 32,
+      "latency": 66.99
+    },
+    {
+      "u": 13,
+      "v": 40,
+      "latency": 14.6
+    },
+    {
+      "u": 13,
+      "v": 42,
+      "latency": 7.6
+    },
+    {
+      "u": 14,
+      "v": 17,
+      "latency": 7.35
+    },
+    {
+      "u": 14,
+      "v": 20,
+      "latency": 13.02
+    },
+    {
+      "u": 14,
+      "v": 26,
+      "latency": 32.65
+    },
+    {
+      "u": 14,
+      "v": 42,
+      "latency": 12.36
+    },
+    {
+      "u": 14,
+      "v": 43,
+      "latency": 43.34
+    },
+    {
+      "u": 14,
+      "v": 46,
+      "latency": 64.93
+    },
+    {
+      "u": 14,
+      "v": 47,
+      "latency": 49.85
+    },
+    {
+      "u": 15,
+      "v": 38,
+      "latency": 45.4
+    },
+    {
+      "u": 15,
+      "v": 42,
+      "latency": 51.2
+    },
+    {
+      "u": 15,
+      "v": 45,
+      "latency": 42.47
+    },
+    {
+      "u": 15,
+      "v": 46,
+      "latency": 21.36
+    },
+    {
+      "u": 16,
+      "v": 21,
+      "latency": 10.41
+    },
+    {
+      "u": 16,
+      "v": 22,
+      "latency": 15.57
+    },
+    {
+      "u": 16,
+      "v": 27,
+      "latency": 61.5
+    },
+    {
+      "u": 16,
+      "v": 30,
+      "latency": 37.45
+    },
+    {
+      "u": 16,
+      "v": 35,
+      "latency": 41.58
+    },
+    {
+      "u": 16,
+      "v": 45,
+      "latency": 9.56
+    },
+    {
+      "u": 17,
+      "v": 21,
+      "latency": 3.52
+    },
+    {
+      "u": 17,
+      "v": 25,
+      "latency": 56.53
+    },
+    {
+      "u": 17,
+      "v": 38,
+      "latency": 12.02
+    },
+    {
+      "u": 17,
+      "v": 41,
+      "latency": 23.9
+    },
+    {
+      "u": 17,
+      "v": 42,
+      "latency": 69.46
+    },
+    {
+      "u": 17,
+      "v": 44,
+      "latency": 32.49
+    },
+    {
+      "u": 18,
+      "v": 27,
+      "latency": 45.75
+    },
+    {
+      "u": 18,
+      "v": 30,
+      "latency": 44.03
+    },
+    {
+      "u": 18,
+      "v": 36,
+      "latency": 74.72
+    },
+    {
+      "u": 18,
+      "v": 39,
+      "latency": 19.76
+    },
+    {
+      "u": 18,
+      "v": 43,
+      "latency": 21.94
+    },
+    {
+      "u": 18,
+      "v": 45,
+      "latency": 17.56
+    },
+    {
+      "u": 18,
+      "v": 49,
+      "latency": 44.61
+    },
+    {
+      "u": 19,
+      "v": 20,
+      "latency": 36.72
+    },
+    {
+      "u": 19,
+      "v": 34,
+      "latency": 43.86
+    },
+    {
+      "u": 19,
+      "v": 37,
+      "latency": 33.38
+    },
+    {
+      "u": 20,
+      "v": 21,
+      "latency": 7.3
+    },
+    {
+      "u": 20,
+      "v": 25,
+      "latency": 22.68
+    },
+    {
+      "u": 20,
+      "v": 28,
+      "latency": 69.24
+    },
+    {
+      "u": 20,
+      "v": 41,
+      "latency": 53.79
+    },
+    {
+      "u": 20,
+      "v": 44,
+      "latency": 25.47
+    },
+    {
+      "u": 20,
+      "v": 46,
+      "latency": 25.71
+    },
+    {
+      "u": 21,
+      "v": 27,
+      "latency": 16.4
+    },
+    {
+      "u": 21,
+      "v": 28,
+      "latency": 39.02
+    },
+    {
+      "u": 21,
+      "v": 30,
+      "latency": 19.25
+    },
+    {
+      "u": 21,
+      "v": 47,
+      "latency": 22.05
+    },
+    {
+      "u": 21,
+      "v": 48,
+      "latency": 57.07
+    },
+    {
+      "u": 22,
+      "v": 23,
+      "latency": 13.49
+    },
+    {
+      "u": 22,
+      "v": 24,
+      "latency": 38.52
+    },
+    {
+      "u": 22,
+      "v": 26,
+      "latency": 44.64
+    },
+    {
+      "u": 22,
+      "v": 27,
+      "latency": 48.38
+    },
+    {
+      "u": 22,
+      "v": 37,
+      "latency": 70.23
+    },
+    {
+      "u": 22,
+      "v": 38,
+      "latency": 64.44
+    },
+    {
+      "u": 22,
+      "v": 45,
+      "latency": 13.52
+    },
+    {
+      "u": 23,
+      "v": 29,
+      "latency": 38.07
+    },
+    {
+      "u": 23,
+      "v": 34,
+      "latency": 64.25
+    },
+    {
+      "u": 23,
+      "v": 40,
+      "latency": 68.13
+    },
+    {
+      "u": 24,
+      "v": 40,
+      "latency": 25.08
+    },
+    {
+      "u": 24,
+      "v": 42,
+      "latency": 56.6
+    },
+    {
+      "u": 25,
+      "v": 34,
+      "latency": 19.17
+    },
+    {
+      "u": 25,
+      "v": 37,
+      "latency": 65.5
+    },
+    {
+      "u": 25,
+      "v": 39,
+      "latency": 60.5
+    },
+    {
+      "u": 25,
+      "v": 42,
+      "latency": 34.28
+    },
+    {
+      "u": 25,
+      "v": 45,
+      "latency": 35.45
+    },
+    {
+      "u": 26,
+      "v": 36,
+      "latency": 67.4
+    },
+    {
+      "u": 26,
+      "v": 37,
+      "latency": 24.0
+    },
+    {
+      "u": 26,
+      "v": 41,
+      "latency": 59.8
+    },
+    {
+      "u": 26,
+      "v": 42,
+      "latency": 65.09
+    },
+    {
+      "u": 26,
+      "v": 43,
+      "latency": 14.27
+    },
+    {
+      "u": 26,
+      "v": 44,
+      "latency": 47.21
+    },
+    {
+      "u": 26,
+      "v": 47,
+      "latency": 14.93
+    },
+    {
+      "u": 27,
+      "v": 28,
+      "latency": 13.49
+    },
+    {
+      "u": 27,
+      "v": 31,
+      "latency": 47.1
+    },
+    {
+      "u": 27,
+      "v": 47,
+      "latency": 20.65
+    },
+    {
+      "u": 27,
+      "v": 49,
+      "latency": 24.66
+    },
+    {
+      "u": 28,
+      "v": 33,
+      "latency": 6.1
+    },
+    {
+      "u": 28,
+      "v": 45,
+      "latency": 25.95
+    },
+    {
+      "u": 28,
+      "v": 48,
+      "latency": 39.23
+    },
+    {
+      "u": 29,
+      "v": 30,
+      "latency": 13.01
+    },
+    {
+      "u": 29,
+      "v": 31,
+      "latency": 60.85
+    },
+    {
+      "u": 29,
+      "v": 34,
+      "latency": 27.5
+    },
+    {
+      "u": 29,
+      "v": 35,
+      "latency": 47.12
+    },
+    {
+      "u": 29,
+      "v": 43,
+      "latency": 65.09
+    },
+    {
+      "u": 29,
+      "v": 49,
+      "latency": 38.83
+    },
+    {
+      "u": 30,
+      "v": 32,
+      "latency": 54.28
+    },
+    {
+      "u": 30,
+      "v": 38,
+      "latency": 34.99
+    },
+    {
+      "u": 30,
+      "v": 39,
+      "latency": 43.43
+    },
+    {
+      "u": 30,
+      "v": 43,
+      "latency": 69.14
+    },
+    {
+      "u": 31,
+      "v": 34,
+      "latency": 6.98
+    },
+    {
+      "u": 31,
+      "v": 37,
+      "latency": 6.52
+    },
+    {
+      "u": 31,
+      "v": 48,
+      "latency": 28.98
+    },
+    {
+      "u": 32,
+      "v": 38,
+      "latency": 39.04
+    },
+    {
+      "u": 33,
+      "v": 40,
+      "latency": 24.65
+    },
+    {
+      "u": 33,
+      "v": 43,
+      "latency": 51.53
+    },
+    {
+      "u": 33,
+      "v": 47,
+      "latency": 45.98
+    },
+    {
+      "u": 34,
+      "v": 35,
+      "latency": 50.7
+    },
+    {
+      "u": 36,
+      "v": 44,
+      "latency": 46.9
+    },
+    {
+      "u": 36,
+      "v": 46,
+      "latency": 56.47
+    },
+    {
+      "u": 37,
+      "v": 43,
+      "latency": 47.59
+    },
+    {
+      "u": 38,
+      "v": 45,
+      "latency": 61.78
+    },
+    {
+      "u": 39,
+      "v": 40,
+      "latency": 35.78
+    },
+    {
+      "u": 39,
+      "v": 45,
+      "latency": 38.71
+    },
+    {
+      "u": 40,
+      "v": 45,
+      "latency": 30.89
+    },
+    {
+      "u": 41,
+      "v": 49,
+      "latency": 62.74
+    },
+    {
+      "u": 43,
+      "v": 47,
+      "latency": 56.89
+    },
+    {
+      "u": 46,
+      "v": 47,
+      "latency": 62.71
+    },
+    {
+      "u": 47,
+      "v": 48,
+      "latency": 8.2
+    }
+  ]
+}

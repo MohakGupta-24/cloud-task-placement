@@ -1,0 +1,177 @@
+{
+  "directed": false,
+  "nodes": [
+    {
+      "node_id": 0,
+      "capacity": 145.91,
+      "metadata": {
+        "x": 2.5,
+        "y": 27.5,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 1,
+      "capacity": 83.48,
+      "metadata": {
+        "x": 73.65,
+        "y": 67.67,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 2,
+      "capacity": 183.83,
+      "metadata": {
+        "x": 8.69,
+        "y": 42.19,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 3,
+      "capacity": 54.47,
+      "metadata": {
+        "x": 21.86,
+        "y": 50.54,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 4,
+      "capacity": 53.98,
+      "metadata": {
+        "x": 19.88,
+        "y": 64.99,
+        "region": "region_4"
+      }
+    },
+    {
+      "node_id": 5,
+      "capacity": 131.74,
+      "metadata": {
+        "x": 22.04,
+        "y": 58.93,
+        "region": "region_0"
+      }
+    },
+    {
+      "node_id": 6,
+      "capacity": 171.41,
+      "metadata": {
+        "x": 0.65,
+        "y": 80.58,
+        "region": "region_1"
+      }
+    },
+    {
+      "node_id": 7,
+      "capacity": 154.72,
+      "metadata": {
+        "x": 34.03,
+        "y": 15.55,
+        "region": "region_2"
+      }
+    },
+    {
+      "node_id": 8,
+      "capacity": 193.58,
+      "metadata": {
+        "x": 33.66,
+        "y": 9.27,
+        "region": "region_3"
+      }
+    },
+    {
+      "node_id": 9,
+      "capacity": 64.51,
+      "metadata": {
+        "x": 84.75,
+        "y": 60.37,
+        "region": "region_4"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "u": 0,
+      "v": 1,
+      "latency": 18.93
+    },
+    {
+      "u": 0,
+      "v": 5,
+      "latency": 9.69
+    },
+    {
+      "u": 0,
+      "v": 8,
+      "latency": 17.08
+    },
+    {
+      "u": 1,
+      "v": 3,
+      "latency": 10.12
+    },
+    {
+      "u": 2,
+      "v": 4,
+      "latency": 4.32
+    },
+    {
+      "u": 2,
+      "v": 5,
+      "latency": 17.84
+    },
+    {
+      "u": 2,
+      "v": 7,
+      "latency": 11.88
+    },
+    {
+      "u": 2,
+      "v": 8,
+      "latency": 15.0
+    },
+    {
+      "u": 2,
+      "v": 9,
+      "latency": 11.28
+    },
+    {
+      "u": 3,
+      "v": 5,
+      "latency": 2.71
+    },
+    {
+      "u": 4,
+      "v": 6,
+      "latency": 24.94
+    },
+    {
+      "u": 4,
+      "v": 8,
+      "latency": 9.53
+    },
+    {
+      "u": 4,
+      "v": 9,
+      "latency": 12.84
+    },
+    {
+      "u": 5,
+      "v": 6,
+      "latency": 4.9
+    },
+    {
+      "u": 5,
+      "v": 8,
+      "latency": 21.02
+    },
+    {
+      "u": 6,
+      "v": 9,
+      "latency": 17.41
+    }
+  ]
+}
