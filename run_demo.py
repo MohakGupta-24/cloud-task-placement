@@ -171,10 +171,47 @@ def run_demo(lambda_sync: float = 0.5) -> None:
     latency_improvement_vs_rand = ((rand_m.average_access_latency - dp_m.average_access_latency) / rand_m.average_access_latency * 100.0)
     gap_vs_lower_bound = ((dp_m.total_objective - lb_obj) / lb_obj * 100.0)
 
+    # Compute actual DP vs Spill-Over gap
+    dp_obj = dp_m.total_objective
+    sp_obj = sp_m.total_objective
+    if dp_obj < sp_obj:
+        sp_gap_pct = (sp_obj - dp_obj) / sp_obj * 100.0
+        t3_str = (
+            f"Knapsack DP achieves a {sp_gap_pct:.2f}% lower total objective than Spill-Over Greedy "
+            f"({dp_obj:,.1f} vs {sp_obj:,.1f}, saving {sp_obj - dp_obj:,.1f} cost units)."
+        )
+    elif dp_obj > sp_obj:
+        sp_gap_pct = (dp_obj - sp_obj) / sp_obj * 100.0
+        t3_str = (
+            f"Spill-Over Greedy achieves a {sp_gap_pct:.2f}% lower objective on this instance "
+            f"({sp_obj:,.1f} vs {dp_obj:,.1f})."
+        )
+    else:
+        t3_str = f"Knapsack DP and Spill-Over Greedy tied with identical objective ({dp_obj:,.1f})."
+
+    # Compute fleet host counts and min/max utilization
+    hosting_servers = [s for s in report.server_summaries if s.placed_tasks]
+    num_hosting = len(hosting_servers)
+    total_servers = len(report.server_summaries)
+    if hosting_servers:
+        hosting_utils = [s.utilization_percent for s in hosting_servers]
+        min_host_util = min(hosting_utils)
+        max_host_util = max(hosting_utils)
+        all_utils = [s.utilization_percent for s in report.server_summaries]
+        min_all_util = min(all_utils)
+        max_all_util = max(all_utils)
+        t4_str = (
+            f"{num_hosting} of {total_servers} servers host tasks. "
+            f"Utilization on hosting servers ranges from {min_host_util:.1f}% to {max_host_util:.1f}% "
+            f"(overall fleet min: {min_all_util:.1f}%, max: {max_all_util:.1f}%)."
+        )
+    else:
+        t4_str = f"0 of {total_servers} servers host tasks (0.0% utilization)."
+
     print(f"  1. Solution Quality  : Knapsack DP is within {gap_vs_lower_bound:.2f}% of the theoretical unconstrained lower bound.")
     print(f"  2. Baseline Advantage: Knapsack DP cuts client access latency by {latency_improvement_vs_rand:.1f}% compared to Random placement.")
-    print(f"  3. Regret Coordination: Knapsack DP outperforms simple Spill-Over Greedy by coordinating bids across congested servers.")
-    print(f"  4. Fleet Distribution: Tasks are balanced across the whole fleet, avoiding bottlenecking on any single server.")
+    print(f"  3. Regret vs Greedy  : {t3_str}")
+    print(f"  4. Fleet Distribution: {t4_str}")
     print(f"  5. Sync Efficiency   : Server {report.sync_hub_node} serves as the centralized sync hub, keeping replication delay to {report.backbone_sync_latency:.2f} ms.")
     print("=" * 94 + "\n")
 

@@ -62,24 +62,24 @@ cloud-task-placement/
 │   ├── graph/                     # Graph primitives and topology generation
 │   │   ├── __init__.py
 │   │   ├── graph.py               # Adjacency-list Graph and Node classes
-│   │   └── generator.py           # Reproducible synthetic topology generator
+│   │   ├── generator.py           # Reproducible synthetic topology generator
+│   │   ├── min_heap.py            # Binary Min-Heap priority queue with decrease-key
+│   │   └── disjoint_set.py        # Disjoint Set Union (DSU) with path compression & union-by-rank
 │   ├── mst/                       # Minimum Spanning Tree algorithms
 │   │   ├── __init__.py
-│   │   ├── dsu.py                 # Disjoint Set Union with path compression & rank
 │   │   ├── kruskal.py             # Kruskal's algorithm (O(E log E))
 │   │   └── prim.py                # Prim's algorithm with Min-Heap (O(E log V))
 │   ├── shortest_paths/            # Shortest path routing algorithms
 │   │   ├── __init__.py
-│   │   ├── priority_queue.py      # Binary Min-Heap with decrease-key capability
 │   │   ├── dijkstra.py            # Dijkstra's SSSP and APSP
 │   │   ├── bellman_ford.py        # Bellman-Ford SSSP (O(VE)) with negative cycle check
-│   │   ├── floyd_warshall.py      # Floyd-Warshall APSP (O(V^3))
-│   │   └── johnson.py             # Johnson's APSP for sparse graphs
+│   │   └── floyd_warshall.py      # Floyd-Warshall APSP (O(V^3))
 │   ├── placement/                 # Resource allocation & knapsack schedulers
 │   │   ├── __init__.py
 │   │   ├── knapsack_dp.py         # 0-1 Knapsack DP (pseudo-polynomial O(n*W))
 │   │   ├── greedy_scheduler.py    # Greedy ratio scheduler & fractional upper bound
-│   │   └── exact_solver.py        # Exact brute-force assignment solver
+│   │   ├── brute_force.py         # Exact brute-force assignment solver
+│   │   └── models.py              # Placement dataclasses and solution containers
 │   └── optimizer/                 # End-to-end optimizer pipeline
 │       ├── __init__.py
 │       ├── workload.py            # Task and Workload data classes
@@ -235,7 +235,7 @@ As $\lambda$ increases from $0.0$ to $2.0$:
 ## 8. Implementation Roadmap
 
 - [x] **Stage 1**: Custom Adjacency List Graph, synthetic cloud topology generator, benchmark datasets, and unit tests.
-- [x] **Stage 2**: Disjoint Set Union, Priority Queue Min-Heap, MST (Prim & Kruskal), and Shortest Paths (Dijkstra, Bellman-Ford, Floyd-Warshall, Johnson).
+- [x] **Stage 2**: Disjoint Set Union, Priority Queue Min-Heap, MST (Prim & Kruskal), and Shortest Paths (Dijkstra, Bellman-Ford, Floyd-Warshall).
 - [x] **Stage 3**: 0-1 Knapsack Dynamic Programming, greedy ratio schedulers, and fractional upper bound.
 - [x] **Stage 4**: Integrated multi-round placement optimizer (`CloudPlacementOptimizer`), regret coordination, routing tables, and demo (`run_demo.py`).
 - [x] **Stage 5**: 10-repeat runtime benchmarks, 10-seed placement quality sensitivity experiments, and Matplotlib figure generation.

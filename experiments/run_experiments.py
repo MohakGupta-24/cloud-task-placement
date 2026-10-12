@@ -498,7 +498,8 @@ def benchmark_placement_lambda(
     num_tasks: int = 35,
 ) -> List[Dict[str, Any]]:
     """Evaluates access latency vs MST sync cost trade-off across lambda weights."""
-    print(f"\n--- Running Lambda Sensitivity Sweep (0.0, 0.5, 1.0, 2.0, {num_seeds} seeds) ---")
+    lambda_str = ", ".join(f"{l}" for l in lambdas)
+    print(f"\n--- Running Lambda Sensitivity Sweep ([{lambda_str}], {num_seeds} seeds) ---")
     results = []
 
     for lmb in lambdas:
@@ -527,7 +528,7 @@ def benchmark_placement_lambda(
 
         results.append(row)
         print(
-            f"  Lambda={lmb:3.1f} | "
+            f"  Lambda={lmb:5.1f} | "
             f"Access Lat: {row['iterative_knapsack_dp_lat_mean']:5.2f} ± {row['iterative_knapsack_dp_lat_std']:4.2f} ms | "
             f"Sync Cost: {row['iterative_knapsack_dp_sync_mean']:5.1f} ± {row['iterative_knapsack_dp_sync_std']:4.1f} | "
             f"DP Gap: {row['iterative_knapsack_dp_gap_mean']:5.2f}%"
@@ -540,6 +541,91 @@ def benchmark_placement_lambda(
         writer.writerows(results)
     print(f"Saved: {csv_path}")
     return results
+
+
+def benchmark_brute_force_optimality(
+    num_instances: int = 60,
+    num_servers: int = 5,
+    num_tasks: int = 6,
+) -> Dict[str, Any]:
+    """Evaluates Iterative Knapsack DP against the exact Brute-Force optimum on random tiny instances.
+
+    Generates num_instances random tiny instances with random server capacities,
+    link latencies, task demands, client access traffic, and replication traffic.
+    Saves results to brute_force_optimality_gap.csv.
+    """
+    print(f"\n--- Running Brute-Force Optimality Experiment ({num_instances} instances: {num_servers} servers, {num_tasks} tasks) ---")
+    rows: List[Dict[str, Any]] = []
+    gaps: List[float] = []
+
+    for i in range(num_instances):
+        seed = 2000 + i
+        g = generate_cloud_topology(
+            num_nodes=num_servers,
+            edge_density=0.50,
+            latency_range=(5.0, 30.0),
+            capacity_range=(35, 65),
+            seed=seed,
+        )
+        tasks = generate_synthetic_workload(
+            graph=g,
+            num_tasks=num_tasks,
+            demand_range=(15, 35),
+            requests_per_task=(10.0, 100.0),
+            replication_traffic_range=(2.0, 20.0),
+            seed=seed,
+        )
+        opt = CloudPlacementOptimizer(g, tasks, lambda_sync=1.0)
+        report = opt.optimize()
+
+        bf = report.strategy_metrics.get("brute_force_optimal")
+        dp = report.strategy_metrics.get("iterative_knapsack_dp")
+
+        if bf is not None and dp is not None and bf.total_objective > 0:
+            gap_pct = max(0.0, ((dp.total_objective - bf.total_objective) / bf.total_objective) * 100.0)
+            gaps.append(gap_pct)
+            rows.append({
+                "instance_id": i + 1,
+                "seed": seed,
+                "num_servers": num_servers,
+                "num_tasks": num_tasks,
+                "bf_total_objective": round(bf.total_objective, 2),
+                "dp_total_objective": round(dp.total_objective, 2),
+                "optimality_gap_pct": round(gap_pct, 4),
+                "bf_placed_tasks": bf.placed_tasks_count,
+                "dp_placed_tasks": dp.placed_tasks_count,
+                "bf_access_latency_ms": round(bf.average_access_latency, 2),
+                "dp_access_latency_ms": round(dp.average_access_latency, 2),
+                "bf_sync_cost": round(bf.average_sync_cost, 2),
+                "dp_sync_cost": round(dp.average_sync_cost, 2),
+            })
+
+    csv_path = os.path.join(RESULTS_DIR, "brute_force_optimality_gap.csv")
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Saved: {csv_path}")
+
+    mean_gap = statistics.mean(gaps)
+    median_gap = statistics.median(gaps)
+    max_gap = max(gaps)
+    exceed_5 = sum(1 for g in gaps if g > 5.0)
+
+    print("\n--- Brute-Force Optimality Summary ---")
+    print(f"  Total Tiny Instances Evaluated : {len(gaps)}")
+    print(f"  Mean Optimality Gap            : {mean_gap:.4f}%")
+    print(f"  Median Optimality Gap          : {median_gap:.4f}%")
+    print(f"  Maximum Optimality Gap         : {max_gap:.4f}%")
+    print(f"  Instances Exceeding 5% Gap     : {exceed_5} / {len(gaps)} ({exceed_5 / len(gaps) * 100.0:.1f}%)")
+
+    return {
+        "mean_gap": mean_gap,
+        "median_gap": median_gap,
+        "max_gap": max_gap,
+        "exceed_5_count": exceed_5,
+        "total_instances": len(gaps),
+    }
 
 
 # ==============================================================================
@@ -857,7 +943,8 @@ def main():
     cap_res = benchmark_placement_capacity(multipliers=[0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 2.00], num_seeds=10)
     task_res = benchmark_placement_num_tasks(task_counts=[15, 25, 35, 50, 75], num_seeds=10)
     size_res, density_res = benchmark_placement_graph_size_and_density(sizes=[15, 30, 50, 75], densities=[0.15, 0.35, 0.60, 0.85], num_seeds=10)
-    lambda_res = benchmark_placement_lambda(lambdas=[0.0, 0.5, 1.0, 2.0], num_seeds=10)
+    lambda_res = benchmark_placement_lambda(lambdas=[0.0, 1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 200.0], num_seeds=10)
+    bf_res = benchmark_brute_force_optimality(num_instances=60, num_servers=5, num_tasks=6)
 
     # 3. Generate Visualizations with Error Bars
     print("\n--- Generating Publication-Grade Figures with Error Bars ---")
