@@ -11,7 +11,10 @@ import unittest
 
 from src.placement.models import PlacementOption
 from src.placement.knapsack_dp import knapsack_01_dp
-from src.placement.greedy_scheduler import greedy_placement_selection
+from src.placement.greedy_scheduler import (
+    greedy_placement_selection,
+    fractional_knapsack_greedy,
+)
 from src.placement.brute_force import brute_force_knapsack
 
 
@@ -58,19 +61,26 @@ class TestPlacementSelection(unittest.TestCase):
 
         greedy_res = greedy_placement_selection(items, capacity)
         dp_res = knapsack_01_dp(items, capacity)
+        frac_res = fractional_knapsack_greedy(items, capacity)
 
-        # Greedy choice
+        # Greedy choice: {VM_1, VM_2} -> cost 30, benefit 160
         self.assertEqual(set(greedy_res.selected_ids), {"VM_1", "VM_2"})
         self.assertEqual(greedy_res.total_cost, 30)
         self.assertAlmostEqual(greedy_res.total_benefit, 160.0, places=4)
 
-        # Optimal DP choice
+        # Optimal DP choice: {VM_2, VM_3} -> cost 50, benefit 220
         self.assertEqual(set(dp_res.selected_ids), {"VM_2", "VM_3"})
         self.assertEqual(dp_res.total_cost, 50)
         self.assertAlmostEqual(dp_res.total_benefit, 220.0, places=4)
 
-        # DP strictly outperforms Greedy
+        # Fractional knapsack relaxation: VM_1 (1.0), VM_2 (1.0), VM_3 (20/30 = 0.666667)
+        # Benefit = 60 + 100 + 120*(2/3) = 240.0, cost = 50.0
+        self.assertAlmostEqual(frac_res.total_benefit, 240.0, places=4)
+        self.assertAlmostEqual(frac_res.total_cost, 50.0, places=4)
+
+        # Fundamental Knapsack Hierarchy: Greedy <= 0-1 DP <= Fractional
         self.assertGreater(dp_res.total_benefit, greedy_res.total_benefit)
+        self.assertGreater(frac_res.total_benefit, dp_res.total_benefit)
 
     def test_brute_force_exhaustive_check_on_random_inputs(self):
         """Exhaustively cross-verifies DP against brute-force (2^n search) across multiple random instances."""
@@ -100,6 +110,7 @@ class TestPlacementSelection(unittest.TestCase):
             dp_res = knapsack_01_dp(items, capacity)
             bf_res = brute_force_knapsack(items, capacity)
             greedy_res = greedy_placement_selection(items, capacity)
+            frac_res = fractional_knapsack_greedy(items, capacity)
 
             # 1. DP must match Brute Force optimal benefit exactly
             self.assertAlmostEqual(
@@ -113,8 +124,16 @@ class TestPlacementSelection(unittest.TestCase):
             self.assertLessEqual(dp_res.total_cost, capacity)
             self.assertLessEqual(bf_res.total_cost, capacity)
             self.assertLessEqual(greedy_res.total_cost, capacity)
+            self.assertLessEqual(frac_res.total_cost, capacity + 1e-6)
 
-            # 3. DP is globally optimal, hence dp_benefit >= greedy_benefit
+            # 3. Fractional knapsack is an exact theoretical upper bound on 0-1 knapsack DP
+            self.assertGreaterEqual(
+                frac_res.total_benefit + 1e-6,
+                dp_res.total_benefit,
+                msg=f"Fractional relaxation ({frac_res.total_benefit}) must upper bound DP ({dp_res.total_benefit}) on n={n}",
+            )
+
+            # 4. DP is globally optimal for 0-1, hence dp_benefit >= greedy_benefit
             self.assertGreaterEqual(
                 dp_res.total_benefit + 1e-9,
                 greedy_res.total_benefit,

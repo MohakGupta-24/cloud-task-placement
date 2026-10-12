@@ -1,15 +1,30 @@
-"""End-to-End Cloud Task Placement Optimizer.
+"""End-to-End Cloud Task Placement Optimizer with Iterative Knapsack Rounds and MST Sync.
 
-Integrates:
-1. Minimum Spanning Tree (MST) for communication backbone topology.
-2. All-Pairs Shortest Paths (APSP) for end-to-end request routing.
-3. 0-1 Knapsack Dynamic Programming for capacity-constrained placement selection.
-4. Comprehensive policy outputs: Placements, Routing Table, Cost/Benefit Table, and Latency Metrics.
+Incorporates:
+1. Multi-server feasibility: Tasks can be placed on ANY server with sufficient capacity.
+2. Iterative Knapsack Rounds with Regret:
+   - In each round, unplaced tasks propose to their best feasible server.
+   - Proposal benefit = regret = Cost(next-best feasible server) - Cost(best server).
+   - Servers run 0-1 Knapsack DP (or greedy ratio) to admit highest-regret proposals.
+   - Rejected tasks re-propose to remaining feasible servers in subsequent rounds.
+3. Multi-Strategy Benchmarking:
+   - Iterative Knapsack DP
+   - Iterative Greedy Heuristic
+   - Spill-over Greedy (highest traffic first, best available server)
+   - Random Feasible Placement
+   - Unconstrained Lower Bound (ignoring server capacities)
+   - Exact Brute-Force Assignment Solver (for small instances)
+4. MST Backbone Integration:
+   - Weighted median node of the MST acts as the synchronization hub.
+   - Sync cost = replication_traffic * MST_path_distance(host, sync_hub).
+   - Objective = weighted_access_latency + lambda_sync * sync_cost.
 """
 
 from __future__ import annotations
+import itertools
+import random
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..graph.graph import Graph
 from ..mst.kruskal import kruskal_mst
@@ -22,7 +37,7 @@ from .workload import Task
 
 @dataclass
 class PlacementDecision:
-    """Record of a task placed on a specific server."""
+    """Record of an accepted task placement on a server."""
     task_id: str
     server_id: int
     demand_cost: int
@@ -48,263 +63,559 @@ class ServerPlacementSummary:
 
 
 @dataclass
+class StrategyMetrics:
+    """Comprehensive performance metrics for a specific placement strategy."""
+    strategy_name: str
+    placed_tasks_count: int
+    unplaced_tasks_count: int
+    unplaced_task_ids: List[str]
+    average_access_latency: float  # ms across placed requests
+    average_sync_cost: float       # mean sync cost across placed tasks
+    total_objective: float         # sum of composite costs across placed tasks
+    fleet_utilization_pct: float
+    assignments: Dict[str, int]    # task_id -> server_id
+
+
+@dataclass
 class OptimizerReport:
-    """Complete optimization report and policy recommendations."""
-    # MST Backbone
+    """Full optimization report comparing all placement strategies and MST backbone."""
     mst_edges: List[Tuple[int, int, float]]
     mst_total_weight: float
+    sync_hub_node: int
     backbone_sync_latency: float
-
-    # Routing Table: (source, destination) -> {"path": [...], "latency": float}
     routing_table: Dict[Tuple[int, int], Dict[str, Any]]
+    
+    # Strategy-specific metrics
+    strategy_metrics: Dict[str, StrategyMetrics]
 
-    # Placement Decisions & Tables
+    # Primary DP Strategy Details (for backward compatibility and detailed views)
     server_summaries: List[ServerPlacementSummary]
     cost_benefit_table: List[PlacementDecision]
     unplaced_tasks: List[str]
-
-    # Aggregate System Metrics
     baseline_average_latency: float
     optimized_average_latency: float
     latency_reduction_percent: float
     total_capacity_utilization: float
-
-    # Greedy Comparison Baseline
     greedy_optimized_latency: float
     greedy_latency_reduction_percent: float
 
 
 class CloudPlacementOptimizer:
-    """Orchestrates MST backbone extraction, APSP routing, and DP placement selection."""
+    """Orchestrates MST hub extraction, APSP routing, and iterative knapsack placement."""
 
-    def __init__(self, graph: Graph, tasks: List[Task]) -> None:
-        """Initializes the optimizer with a network topology and workload.
+    def __init__(
+        self,
+        graph: Graph,
+        tasks: List[Task],
+        lambda_sync: float = 0.0,
+    ) -> None:
+        """Initializes the optimizer.
 
         Args:
             graph: The cloud server network topology.
-            tasks: List of tasks with resource demands and client traffic profiles.
+            tasks: List of tasks with resource demands, traffic, and replication rates.
+            lambda_sync: Weighting parameter for MST replication synchronization cost.
+                When lambda_sync == 0.0, reproduces pure access latency optimization.
         """
         self.graph: Graph = graph
         self.tasks: List[Task] = tasks
+        self.lambda_sync: float = float(lambda_sync)
+        self.task_map: Dict[str, Task] = {t.task_id: t for t in tasks}
 
-    def optimize(self) -> OptimizerReport:
-        """Executes the full optimization pipeline and returns a structured report."""
+    def _compute_mst_and_hub(
+        self,
+    ) -> Tuple[List[Tuple[int, int, float]], float, int, Dict[int, Dict[int, float]], float]:
+        """Extracts MST backbone and identifies the weighted median sync hub."""
         nodes = self.graph.get_nodes()
+        mst_edges, mst_weight = kruskal_mst(self.graph)
 
-        # =========================================================================
-        # Stage 1: MST Backbone Extraction (Kruskal's Algorithm)
-        # =========================================================================
-        mst_edges, mst_total_weight = kruskal_mst(self.graph)
+        mst_g = Graph(directed=False)
+        for n in nodes:
+            mst_g.add_node(n)
+        for u, v, w in mst_edges:
+            mst_g.add_edge(u, v, latency=w)
 
-        # Build MST subgraph to calculate average inter-server synchronization latency
-        mst_graph = Graph(directed=False)
-        for node in nodes:
-            mst_graph.add_node(node)
-        for u, v, weight in mst_edges:
-            mst_graph.add_edge(u, v, latency=weight)
+        mst_dist, _ = floyd_warshall(mst_g)
 
-        mst_dist_matrix, _ = floyd_warshall(mst_graph)
+        # Weighted median node: minimizes sum of w_v * D_MST(v, hub)
+        # Node weight w_v represents total traffic originating at client node v
+        node_weights: Dict[int, float] = {n: 1.0 for n in nodes}
+        for task in self.tasks:
+            for client, req in task.client_requests.items():
+                node_weights[client] = node_weights.get(client, 1.0) + req
+
+        best_hub = nodes[0]
+        min_hub_weighted_dist = float("inf")
+        for candidate_hub in nodes:
+            weighted_sum = sum(
+                node_weights[v] * mst_dist[v][candidate_hub] for v in nodes
+            )
+            if weighted_sum < min_hub_weighted_dist:
+                min_hub_weighted_dist = weighted_sum
+                best_hub = candidate_hub
+
+        # Average inter-server synchronization delay across backbone
         num_pairs = (len(nodes) * (len(nodes) - 1)) // 2
         total_backbone_dist = sum(
-            mst_dist_matrix[u][v]
+            mst_dist[u][v]
             for i, u in enumerate(nodes)
             for v in nodes[i + 1:]
-            if mst_dist_matrix[u][v] != float("inf")
+            if mst_dist[u][v] != float("inf")
         )
-        backbone_sync_latency = (
-            round(total_backbone_dist / num_pairs, 2) if num_pairs > 0 else 0.0
+        avg_sync_latency = round(total_backbone_dist / num_pairs, 2) if num_pairs > 0 else 0.0
+
+        return mst_edges, mst_weight, best_hub, mst_dist, avg_sync_latency
+
+    def _task_server_cost(
+        self,
+        task: Task,
+        server: int,
+        dist_matrix: Dict[int, Dict[int, float]],
+        mst_dist_matrix: Dict[int, Dict[int, float]],
+        sync_hub: int,
+    ) -> Tuple[float, float, float]:
+        """Calculates access delay, sync cost, and composite cost of placing task on server.
+
+        Returns:
+            Tuple of (per_request_access_latency, sync_cost, composite_cost).
+        """
+        total_traffic = task.total_requests or 1.0
+        weighted_access_delay = sum(
+            req * dist_matrix[client][server]
+            for client, req in task.client_requests.items()
+        )
+        per_req_lat = weighted_access_delay / total_traffic
+
+        # Sync cost along MST to hub: replication_traffic * D_MST(server, hub)
+        sync_cost = task.replication_traffic * mst_dist_matrix[server][sync_hub]
+
+        # Composite cost: total access delay + lambda * sync_cost
+        composite = weighted_access_delay + (self.lambda_sync * sync_cost)
+        return per_req_lat, sync_cost, composite
+
+    def _evaluate_assignments(
+        self,
+        strategy_name: str,
+        assignments: Dict[str, int],
+        unplaced_ids: List[str],
+        dist_matrix: Dict[int, Dict[int, float]],
+        mst_dist_matrix: Dict[int, Dict[int, float]],
+        sync_hub: int,
+    ) -> StrategyMetrics:
+        """Computes standardized metrics for any given placement assignment."""
+        nodes = self.graph.get_nodes()
+        total_placed_traffic = 0.0
+        total_weighted_access_delay = 0.0
+        total_sync_cost = 0.0
+        total_composite_cost = 0.0
+
+        server_used_cap: Dict[int, int] = {n: 0 for n in nodes}
+
+        for task_id, server in assignments.items():
+            task = self.task_map[task_id]
+            server_used_cap[server] += task.demand
+            per_lat, sync, comp = self._task_server_cost(
+                task, server, dist_matrix, mst_dist_matrix, sync_hub
+            )
+            total_placed_traffic += task.total_requests
+            total_weighted_access_delay += per_lat * task.total_requests
+            total_sync_cost += sync
+            total_composite_cost += comp
+
+        avg_access_lat = (
+            round(total_weighted_access_delay / total_placed_traffic, 3)
+            if total_placed_traffic > 0 else 0.0
+        )
+        avg_sync = (
+            round(total_sync_cost / len(assignments), 3)
+            if assignments else 0.0
+        )
+        tot_cap = sum(self.graph.get_capacity(n) for n in nodes)
+        used_cap = sum(server_used_cap.values())
+        fleet_util = round((used_cap / tot_cap * 100.0), 2) if tot_cap > 0 else 0.0
+
+        return StrategyMetrics(
+            strategy_name=strategy_name,
+            placed_tasks_count=len(assignments),
+            unplaced_tasks_count=len(unplaced_ids),
+            unplaced_task_ids=sorted(unplaced_ids),
+            average_access_latency=avg_access_lat,
+            average_sync_cost=avg_sync,
+            total_objective=round(total_composite_cost, 2),
+            fleet_utilization_pct=fleet_util,
+            assignments=assignments,
         )
 
-        # =========================================================================
-        # Stage 2: All-Pairs Shortest Paths & Routing Table (Floyd-Warshall)
-        # =========================================================================
+    def _run_iterative_knapsack(
+        self,
+        use_dp: bool,
+        dist_matrix: Dict[int, Dict[int, float]],
+        mst_dist_matrix: Dict[int, Dict[int, float]],
+        sync_hub: int,
+    ) -> Tuple[Dict[str, int], List[str]]:
+        """Executes iterative knapsack rounds with regret-based proposals."""
+        nodes = self.graph.get_nodes()
+        rem_cap: Dict[int, int] = {n: int(self.graph.get_capacity(n)) for n in nodes}
+        unplaced: Set[str] = {t.task_id for t in self.tasks}
+        assignments: Dict[str, int] = {}
+
+        # Precompute costs for all (task, server)
+        cost_cache: Dict[str, Dict[int, float]] = {}
+        for task in self.tasks:
+            cost_cache[task.task_id] = {
+                s: self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2]
+                for s in nodes
+            }
+
+        max_rounds = len(self.tasks) * 2
+        for _ in range(max_rounds):
+            if not unplaced:
+                break
+
+            # 1. Proposal Generation
+            server_proposals: Dict[int, List[PlacementOption]] = {s: [] for s in nodes}
+            proposals_count = 0
+
+            for t_id in list(unplaced):
+                task = self.task_map[t_id]
+                # Feasible servers with room for task demand
+                feasible = [s for s in nodes if rem_cap[s] >= task.demand]
+                if not feasible:
+                    continue
+
+                # Sort feasible servers by cost ascending
+                feasible.sort(key=lambda s: cost_cache[t_id][s])
+                best_server = feasible[0]
+                best_cost = cost_cache[t_id][best_server]
+
+                if len(feasible) >= 2:
+                    next_best_server = feasible[1]
+                    next_best_cost = cost_cache[t_id][next_best_server]
+                    regret = next_best_cost - best_cost
+                else:
+                    # Sole feasible server remaining: high regret of losing final placement option
+                    worst_cost = max(cost_cache[t_id].values())
+                    regret = (worst_cost - best_cost) + 10.0
+
+                benefit = max(0.01, round(regret, 4))
+                server_proposals[best_server].append(
+                    PlacementOption(
+                        item_id=t_id,
+                        cost=task.demand,
+                        benefit=benefit,
+                        metadata={"task": task, "best_server": best_server},
+                    )
+                )
+                proposals_count += 1
+
+            if proposals_count == 0:
+                # No unplaced task can fit on any server
+                break
+
+            # 2. Server Selection via Knapsack
+            round_accepted = 0
+            for server in nodes:
+                proposals = server_proposals[server]
+                if not proposals:
+                    continue
+
+                cap = rem_cap[server]
+                if use_dp:
+                    result = knapsack_01_dp(proposals, cap)
+                else:
+                    result = greedy_placement_selection(proposals, cap)
+
+                for item in result.selected_items:
+                    t_id = str(item.item_id)
+                    assignments[t_id] = server
+                    rem_cap[server] -= item.cost
+                    unplaced.remove(t_id)
+                    round_accepted += 1
+
+            if round_accepted == 0:
+                # Deadlock: proposals made but none could be accepted
+                break
+
+        return assignments, sorted(list(unplaced))
+
+    def _run_spillover_greedy(
+        self,
+        dist_matrix: Dict[int, Dict[int, float]],
+        mst_dist_matrix: Dict[int, Dict[int, float]],
+        sync_hub: int,
+    ) -> Tuple[Dict[str, int], List[str]]:
+        """Simple spill-over greedy: highest traffic first, best server with capacity."""
+        nodes = self.graph.get_nodes()
+        rem_cap: Dict[int, int] = {n: int(self.graph.get_capacity(n)) for n in nodes}
+        assignments: Dict[str, int] = {}
+        unplaced: List[str] = []
+
+        # Sort tasks descending by client traffic
+        sorted_tasks = sorted(self.tasks, key=lambda t: t.total_requests, reverse=True)
+
+        for task in sorted_tasks:
+            feasible = [s for s in nodes if rem_cap[s] >= task.demand]
+            if not feasible:
+                unplaced.append(task.task_id)
+                continue
+
+            # Pick feasible server with minimum composite cost
+            best_server = min(
+                feasible,
+                key=lambda s: self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2],
+            )
+            assignments[task.task_id] = best_server
+            rem_cap[best_server] -= task.demand
+
+        return assignments, sorted(unplaced)
+
+    def _run_random_placement(
+        self,
+        dist_matrix: Dict[int, Dict[int, float]],
+        mst_dist_matrix: Dict[int, Dict[int, float]],
+        sync_hub: int,
+        seed: int = 42,
+    ) -> Tuple[Dict[str, int], List[str]]:
+        """Random placement: assigns each task to a randomly chosen feasible server."""
+        rng = random.Random(seed)
+        nodes = self.graph.get_nodes()
+        rem_cap: Dict[int, int] = {n: int(self.graph.get_capacity(n)) for n in nodes}
+        assignments: Dict[str, int] = {}
+        unplaced: List[str] = []
+
+        tasks_shuffled = list(self.tasks)
+        rng.shuffle(tasks_shuffled)
+
+        for task in tasks_shuffled:
+            feasible = [s for s in nodes if rem_cap[s] >= task.demand]
+            if not feasible:
+                unplaced.append(task.task_id)
+                continue
+
+            chosen_server = rng.choice(feasible)
+            assignments[task.task_id] = chosen_server
+            rem_cap[chosen_server] -= task.demand
+
+        return assignments, sorted(unplaced)
+
+    def _run_unconstrained_lower_bound(
+        self,
+        dist_matrix: Dict[int, Dict[int, float]],
+        mst_dist_matrix: Dict[int, Dict[int, float]],
+        sync_hub: int,
+    ) -> Tuple[Dict[str, int], List[str]]:
+        """Unconstrained lower bound: places every task on its globally optimal server, ignoring capacity."""
+        nodes = self.graph.get_nodes()
+        assignments: Dict[str, int] = {}
+
+        for task in self.tasks:
+            best_server = min(
+                nodes,
+                key=lambda s: self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2],
+            )
+            assignments[task.task_id] = best_server
+
+        return assignments, []
+
+    def solve_brute_force_assignment(
+        self,
+        dist_matrix: Dict[int, Dict[int, float]],
+        mst_dist_matrix: Dict[int, Dict[int, float]],
+        sync_hub: int,
+    ) -> Optional[StrategyMetrics]:
+        """Exhaustive brute-force assignment solver for tiny benchmark instances (<= 7 tasks, <= 6 servers)."""
+        nodes = self.graph.get_nodes()
+        k = len(self.tasks)
+        m = len(nodes)
+
+        # Guard against combinatorial explosion
+        options = nodes + [None]
+        if (len(options) ** k) > 300_000:
+            return None
+
+        capacities = {s: int(self.graph.get_capacity(s)) for s in nodes}
+        cost_lookup = [
+            {s: self._task_server_cost(self.tasks[i], s, dist_matrix, mst_dist_matrix, sync_hub)[2] for s in nodes}
+            for i in range(k)
+        ]
+        demands = [self.tasks[i].demand for i in range(k)]
+
+        best_assignment: Dict[str, int] = {}
+        best_placed_count = -1
+        best_objective = float("inf")
+
+        # Iterate over all (m+1)^k candidate assignment mappings
+        for combo in itertools.product(options, repeat=k):
+            used_cap: Dict[int, int] = {s: 0 for s in nodes}
+            placed_count = 0
+            total_comp = 0.0
+            feasible = True
+
+            for i, server in enumerate(combo):
+                if server is not None:
+                    used_cap[server] += demands[i]
+                    if used_cap[server] > capacities[server]:
+                        feasible = False
+                        break
+                    placed_count += 1
+                    total_comp += cost_lookup[i][server]
+
+            if not feasible:
+                continue
+
+            if placed_count > best_placed_count or (placed_count == best_placed_count and total_comp < best_objective):
+                best_placed_count = placed_count
+                best_objective = total_comp
+                best_assignment = {self.tasks[i].task_id: combo[i] for i in range(k) if combo[i] is not None}
+
+        unplaced = [t.task_id for t in self.tasks if t.task_id not in best_assignment]
+        return self._evaluate_assignments(
+            strategy_name="brute_force_optimal",
+            assignments=best_assignment,
+            unplaced_ids=unplaced,
+            dist_matrix=dist_matrix,
+            mst_dist_matrix=mst_dist_matrix,
+            sync_hub=sync_hub,
+        )
+
+    def optimize(self) -> OptimizerReport:
+        """Runs all placement strategies, evaluations, and metrics reporting."""
+        nodes = self.graph.get_nodes()
+
+        # 1. MST Backbone & Weighted Median Hub
+        mst_edges, mst_weight, sync_hub, mst_dist, avg_sync_latency = self._compute_mst_and_hub()
+
+        # 2. APSP Shortest Path Routing Table
         dist_matrix, pred_matrix = floyd_warshall(self.graph)
-
         routing_table: Dict[Tuple[int, int], Dict[str, Any]] = {}
         for u in nodes:
             for v in nodes:
-                path = reconstruct_apsp_path(pred_matrix, u, v)
                 routing_table[(u, v)] = {
-                    "path": path,
+                    "path": reconstruct_apsp_path(pred_matrix, u, v),
                     "latency": dist_matrix[u][v],
                 }
 
-        # =========================================================================
-        # Stage 3: Latency-Benefit Formulation
-        # =========================================================================
-        # Compute access latency for each task on each candidate server
-        task_server_latencies: Dict[str, Dict[int, float]] = {}
-        task_baseline_latency: Dict[str, float] = {}
-        task_preferred_server: Dict[str, int] = {}
+        # 3. Execute all Placement Strategies
+        strategy_metrics: Dict[str, StrategyMetrics] = {}
 
-        for task in self.tasks:
-            latencies_per_server: Dict[int, float] = {}
-            total_requests = task.total_requests or 1.0
+        # 3a. Unconstrained Lower Bound
+        asgn_lb, unp_lb = self._run_unconstrained_lower_bound(dist_matrix, mst_dist, sync_hub)
+        strategy_metrics["unconstrained_lower_bound"] = self._evaluate_assignments(
+            "unconstrained_lower_bound", asgn_lb, unp_lb, dist_matrix, mst_dist, sync_hub
+        )
 
-            for server in nodes:
-                weighted_sum = sum(
-                    req_volume * dist_matrix[client][server]
-                    for client, req_volume in task.client_requests.items()
-                )
-                latencies_per_server[server] = round(weighted_sum / total_requests, 3)
+        # 3b. Iterative Knapsack DP (Primary)
+        asgn_dp, unp_dp = self._run_iterative_knapsack(True, dist_matrix, mst_dist, sync_hub)
+        dp_metrics = self._evaluate_assignments(
+            "iterative_knapsack_dp", asgn_dp, unp_dp, dist_matrix, mst_dist, sync_hub
+        )
+        strategy_metrics["iterative_knapsack_dp"] = dp_metrics
 
-            task_server_latencies[task.task_id] = latencies_per_server
-            # Baseline is worst-case unoptimized access latency (or remote gateway)
-            baseline = max(latencies_per_server.values())
-            task_baseline_latency[task.task_id] = baseline
+        # 3c. Iterative Knapsack Greedy
+        asgn_gr, unp_gr = self._run_iterative_knapsack(False, dist_matrix, mst_dist, sync_hub)
+        gr_metrics = self._evaluate_assignments(
+            "iterative_knapsack_greedy", asgn_gr, unp_gr, dist_matrix, mst_dist, sync_hub
+        )
+        strategy_metrics["iterative_knapsack_greedy"] = gr_metrics
 
-            # Preferred server is the one that minimizes client access latency
-            preferred = min(latencies_per_server, key=latencies_per_server.get)
-            task_preferred_server[task.task_id] = preferred
+        # 3d. Simple Spill-over Greedy
+        asgn_spill, unp_spill = self._run_spillover_greedy(dist_matrix, mst_dist, sync_hub)
+        strategy_metrics["spillover_greedy"] = self._evaluate_assignments(
+            "spillover_greedy", asgn_spill, unp_spill, dist_matrix, mst_dist, sync_hub
+        )
 
-        # =========================================================================
-        # Stage 4: Knapsack DP Selection (and Greedy Baseline)
-        # =========================================================================
-        # Group tasks by their primary affinity server
-        server_candidate_items: Dict[int, List[PlacementOption]] = {s: [] for s in nodes}
+        # 3e. Random Feasible Placement
+        asgn_rand, unp_rand = self._run_random_placement(dist_matrix, mst_dist, sync_hub)
+        strategy_metrics["random_placement"] = self._evaluate_assignments(
+            "random_placement", asgn_rand, unp_rand, dist_matrix, mst_dist, sync_hub
+        )
 
-        for task in self.tasks:
-            pref_server = task_preferred_server[task.task_id]
-            best_lat = task_server_latencies[task.task_id][pref_server]
-            baseline_lat = task_baseline_latency[task.task_id]
-            delta_lat = max(0.0, baseline_lat - best_lat)
-            # Weighted benefit represents aggregate network latency saved across all user requests
-            total_benefit = delta_lat * task.total_requests
+        # 3f. Brute-Force Assignment (if tiny instance)
+        bf_metrics = self.solve_brute_force_assignment(dist_matrix, mst_dist, sync_hub)
+        if bf_metrics:
+            strategy_metrics["brute_force_optimal"] = bf_metrics
 
-            # Capacity cost is the task demand
-            server_candidate_items[pref_server].append(
-                PlacementOption(
-                    item_id=task.task_id,
-                    cost=task.demand,
-                    benefit=total_benefit,
-                    metadata={
-                        "task": task,
-                        "best_latency": best_lat,
-                        "baseline_latency": baseline_lat,
-                        "delta_latency": delta_lat,
-                    },
-                )
-            )
-
-        # Solve Knapsack DP on each server
-        dp_results: Dict[int, PlacementResult] = {}
-        greedy_results: Dict[int, PlacementResult] = {}
-
-        for server in nodes:
-            server_capacity = int(self.graph.get_capacity(server))
-            candidates = server_candidate_items[server]
-
-            dp_results[server] = knapsack_01_dp(candidates, server_capacity)
-            greedy_results[server] = greedy_placement_selection(candidates, server_capacity)
-
-        # =========================================================================
-        # Stage 5: Compile Placement Summaries & Cost/Benefit Table
-        # =========================================================================
+        # 4. Compile Detailed DP Reports & Tables
         server_summaries: List[ServerPlacementSummary] = []
         cost_benefit_table: List[PlacementDecision] = []
-        placed_task_ids: set[str] = set()
 
-        for server in nodes:
-            res = dp_results[server]
-            placed_ids = [str(item.item_id) for item in res.selected_items]
-            placed_task_ids.update(placed_ids)
+        server_alloc: Dict[int, List[str]] = {n: [] for n in nodes}
+        for t_id, s in asgn_dp.items():
+            server_alloc[s].append(t_id)
 
-            server_summaries.append(
-                ServerPlacementSummary(
-                    server_id=server,
-                    total_capacity=int(self.graph.get_capacity(server)),
-                    used_capacity=res.total_cost,
-                    placed_tasks=placed_ids,
-                    total_latency_benefit=round(res.total_benefit, 2),
+        for s in nodes:
+            placed = server_alloc[s]
+            used_c = sum(self.task_map[tid].demand for tid in placed)
+            tot_c = int(self.graph.get_capacity(s))
+
+            # Latency benefit relative to unconstrained/baseline
+            total_ben = 0.0
+            for tid in placed:
+                task = self.task_map[tid]
+                per_lat, _, _ = self._task_server_cost(task, s, dist_matrix, mst_dist, sync_hub)
+                worst_lat = max(
+                    self._task_server_cost(task, v, dist_matrix, mst_dist, sync_hub)[0]
+                    for v in nodes
                 )
-            )
-
-            for item in res.selected_items:
-                best_lat = item.metadata["best_latency"]
-                base_lat = item.metadata["baseline_latency"]
-                delta_lat = item.metadata["delta_latency"]
-                ratio = (delta_lat / item.cost) if item.cost > 0 else 0.0
+                b_lat = round(worst_lat, 2)
+                o_lat = round(per_lat, 2)
+                d_lat = round(max(0.0, b_lat - o_lat), 2)
+                tot_ben_t = d_lat * task.total_requests
+                total_ben += tot_ben_t
+                ratio = (d_lat / task.demand) if task.demand > 0 else 0.0
 
                 cost_benefit_table.append(
                     PlacementDecision(
-                        task_id=str(item.item_id),
-                        server_id=server,
-                        demand_cost=item.cost,
-                        baseline_latency=base_lat,
-                        optimized_latency=best_lat,
-                        latency_benefit=delta_lat,
-                        total_benefit=round(item.benefit, 2),
+                        task_id=tid,
+                        server_id=s,
+                        demand_cost=task.demand,
+                        baseline_latency=b_lat,
+                        optimized_latency=o_lat,
+                        latency_benefit=d_lat,
+                        total_benefit=round(tot_ben_t, 2),
                         efficiency_ratio=round(ratio, 4),
                     )
                 )
 
-        unplaced_tasks = [t.task_id for t in self.tasks if t.task_id not in placed_task_ids]
+            server_summaries.append(
+                ServerPlacementSummary(
+                    server_id=s,
+                    total_capacity=tot_c,
+                    used_capacity=used_c,
+                    placed_tasks=placed,
+                    total_latency_benefit=round(total_ben, 2),
+                )
+            )
 
-        # =========================================================================
-        # Stage 6: Calculate System-Wide Average Latencies
-        # =========================================================================
-        total_traffic = sum(t.total_requests for t in self.tasks) or 1.0
-
-        # 6a. Baseline Average Latency: All tasks served at their worst/unplaced latency
-        baseline_total_weighted_lat = sum(
-            task_baseline_latency[t.task_id] * t.total_requests for t in self.tasks
-        )
-        baseline_avg_latency = round(baseline_total_weighted_lat / total_traffic, 2)
-
-        # 6b. DP Optimized Average Latency: Placed tasks served at preferred host
-        dp_total_weighted_lat = 0.0
-        for task in self.tasks:
-            if task.task_id in placed_task_ids:
-                server = task_preferred_server[task.task_id]
-                lat = task_server_latencies[task.task_id][server]
-            else:
-                lat = task_baseline_latency[task.task_id]
-            dp_total_weighted_lat += lat * task.total_requests
-
-        dp_avg_latency = round(dp_total_weighted_lat / total_traffic, 2)
+        # Baseline average latency across unconstrained placement or random
+        rand_metrics = strategy_metrics["random_placement"]
+        baseline_avg_lat = rand_metrics.average_access_latency or dp_metrics.average_access_latency
+        dp_avg_lat = dp_metrics.average_access_latency
         reduction_pct = (
-            round((baseline_avg_latency - dp_avg_latency) / baseline_avg_latency * 100.0, 2)
-            if baseline_avg_latency > 0 else 0.0
+            round((baseline_avg_lat - dp_avg_lat) / baseline_avg_lat * 100.0, 2)
+            if baseline_avg_lat > 0 else 0.0
         )
 
-        # 6c. Greedy Comparison Average Latency
-        greedy_placed_ids = {
-            str(item.item_id)
-            for res in greedy_results.values()
-            for item in res.selected_items
-        }
-        greedy_total_weighted_lat = 0.0
-        for task in self.tasks:
-            if task.task_id in greedy_placed_ids:
-                server = task_preferred_server[task.task_id]
-                lat = task_server_latencies[task.task_id][server]
-            else:
-                lat = task_baseline_latency[task.task_id]
-            greedy_total_weighted_lat += lat * task.total_requests
-
-        greedy_avg_latency = round(greedy_total_weighted_lat / total_traffic, 2)
-        greedy_reduction_pct = (
-            round((baseline_avg_latency - greedy_avg_latency) / baseline_avg_latency * 100.0, 2)
-            if baseline_avg_latency > 0 else 0.0
+        greedy_avg_lat = gr_metrics.average_access_latency
+        gr_reduction_pct = (
+            round((baseline_avg_lat - greedy_avg_lat) / baseline_avg_lat * 100.0, 2)
+            if baseline_avg_lat > 0 else 0.0
         )
-
-        # Overall capacity utilization across all servers
-        total_used = sum(s.used_capacity for s in server_summaries)
-        total_cap = sum(s.total_capacity for s in server_summaries)
-        overall_utilization = round((total_used / total_cap * 100.0), 2) if total_cap > 0 else 0.0
 
         return OptimizerReport(
             mst_edges=mst_edges,
-            mst_total_weight=round(mst_total_weight, 2),
-            backbone_sync_latency=backbone_sync_latency,
+            mst_total_weight=round(mst_weight, 2),
+            sync_hub_node=sync_hub,
+            backbone_sync_latency=avg_sync_latency,
             routing_table=routing_table,
+            strategy_metrics=strategy_metrics,
             server_summaries=server_summaries,
             cost_benefit_table=cost_benefit_table,
-            unplaced_tasks=unplaced_tasks,
-            baseline_average_latency=baseline_avg_latency,
-            optimized_average_latency=dp_avg_latency,
+            unplaced_tasks=unp_dp,
+            baseline_average_latency=round(baseline_avg_lat, 2),
+            optimized_average_latency=round(dp_avg_lat, 2),
             latency_reduction_percent=reduction_pct,
-            total_capacity_utilization=overall_utilization,
-            greedy_optimized_latency=greedy_avg_latency,
-            greedy_latency_reduction_percent=greedy_reduction_pct,
+            total_capacity_utilization=dp_metrics.fleet_utilization_pct,
+            greedy_optimized_latency=round(greedy_avg_lat, 2),
+            greedy_latency_reduction_percent=gr_reduction_pct,
         )

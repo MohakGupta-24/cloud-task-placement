@@ -6,6 +6,7 @@ from .placement_optimizer import (
     OptimizerReport,
     PlacementDecision,
     ServerPlacementSummary,
+    StrategyMetrics,
 )
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     "OptimizerReport",
     "PlacementDecision",
     "ServerPlacementSummary",
+    "StrategyMetrics",
 ]
