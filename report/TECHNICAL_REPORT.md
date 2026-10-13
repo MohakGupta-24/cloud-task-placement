@@ -1,594 +1,289 @@
 # Cloud Task Placement: Routing & Resource Allocation Suite
-## Technical Report & Project-Based Learning Documentation
+## Technical Report: Algorithmic Architecture, Empirical Scaling & Discrete Optimization
 
-**Course**: Design and Analysis of Algorithms (DAA)  
-**Academic Unit**: Problem-Based Learning (PBL) Internal Project  
-**Allotted Problem**: Problem 3 — Cloud Task Placement  
-**Team Designation**: CSE Rhinos — Group 3  
-
-### Team Members
-- **Mohak Gupta** — `25WU0101074`
-- **Naman Singla** — `25WU0101084`
-- **Mohammed Amaan Khan** — `25WU0101075`
+**Course**: Design and Analysis of Algorithms (DAA) — Problem-Based Learning (PBL)  
+**Assigned Topic**: Problem 3 — Cloud Task Placement  
+**Team (Group 3)**:
+- Naman Singla (`25WU0101084`)
+- Mohak Gupta (`25WU0101074`)
+- Mohammed Amaan Khan (`25WU0101075`)
 
 ---
 
-## Table of Contents
-1. [Executive Summary & Problem Identification](#1-executive-summary--problem-identification)
-2. [Literature Survey](#2-literature-survey)
-3. [Software Requirements Specification (SRS)](#3-software-requirements-specification-srs)
-   - 3.1 Scope and Objectives
-   - 3.2 Assumptions & System Boundaries
-   - 3.3 Functional Requirements
-   - 3.4 Non-Functional Requirements
-4. [Project Plan & Milestones](#4-project-plan--milestones)
-5. [Mathematical Modeling & System Formulation](#5-mathematical-modeling--system-formulation)
-   - 5.1 Network Topology Model
-   - 5.2 Workload and Request Traffic Model
-   - 5.3 Formulation of Average Latency and Composite Cost
-   - 5.4 Capacity Constraints
-   - 5.5 Iterative Knapsack Rounds & Regret-Benefit Formulation
-   - 5.6 Baseline Placement Strategies & Fair Comparison
-6. [Algorithmic Architecture & Complexity Analysis](#6-algorithmic-architecture--complexity-analysis)
-   - 6.1 Custom Fundamental Data Structures
-   - 6.2 Minimum Spanning Tree (MST): Kruskal vs. Prim
-   - 6.3 Shortest Path Routing: Dijkstra, Bellman-Ford, and Floyd-Warshall
-   - 6.4 Placement Optimization: Iterative Knapsack DP vs. Greedy Rounds
-   - 6.5 Asymptotic Complexity Comparison Matrix
-7. [Correctness Proof Sketches](#7-correctness-proof-sketches)
-   - 7.1 Cut Property for Minimum Spanning Trees
-   - 7.2 Relaxation Invariant for Dijkstra's Algorithm
-   - 7.3 Optimal Substructure & Pseudo-Polynomial Complexity for 0-1 Knapsack
-8. [Experimental Evaluation & Empirical Results](#8-experimental-evaluation--empirical-results)
-   - 8.1 Testbed Setup & Topologies
-   - 8.2 MST Runtime Scaling: Kruskal vs. Prim on Sparse and Dense Topologies
-   - 8.3 SSSP Runtime & Speedup: Dijkstra vs. Bellman-Ford
-   - 8.4 APSP Scaling: Floyd-Warshall vs. Repeated Dijkstra
-   - 8.5 Placement Solution Quality Across Capacity Constraints (0.25x to 2.0x)
-   - 8.6 Workload Scaling Sensitivity
-   - 8.7 Lambda Sensitivity: Client Latency vs. MST Backbone Sync Trade-off
-   - 8.8 Visual Topology and Backbone Overlay
-9. [Limitations of the Approach](#9-limitations-of-the-approach)
-10. [Algorithmic Trade-offs & Discussion](#10-algorithmic-trade-offs--discussion)
-11. [Engineering Policy Recommendations](#11-engineering-policy-recommendations)
-12. [Conclusion & Future Work](#12-conclusion--future-work)
-13. [References](#13-references)
+## 1. Problem Identification & Motivation
 
----
+Modern distributed computing environments—spanning multi-region clouds and edge computing clusters—face the fundamental challenge of placing client workloads onto physical infrastructure while balancing physical computing capacity, transit latency, and state replication overhead. When client requests enter the cloud at geographically dispersed ingress gateways, they must be assigned to physical host servers under three strict engineering requirements:
 
-## 1. Executive Summary & Problem Identification
+1. **Finite Physical Server Capacity**: Each host $v \in V$ provides finite integer capacity $C_v$; aggregate task demand on $v$ cannot exceed $C_v$.
+2. **Physical Routing Latency**: Physical links $(u, v) \in E$ have delays $w(u, v) > 0$; sub-optimal placement degrades end-user QoS.
+3. **Distributed Synchronization Overhead**: Stateful replicas must synchronize logs across a dedicated, cycle-free backbone to avoid network congestion.
 
-Modern cloud computing systems operate across distributed networks of regional datacenters, metropolitan edge clusters, and points of presence (PoPs). In these environments, physical server nodes are geographically dispersed. Running cloud applications, microservices, and virtual machine (VM) replicas across these networks introduces two competing constraints:
-
-1. **Physical Resource Scarcity**: Each server possesses a finite compute capacity (CPU cores, RAM slots, or container execution limits). A single server cannot host all incoming workloads.
-2. **Network Latency & Synchronization Overhead**: Network links connecting datacenters incur physical transit delays ranging from $1\,\text{ms}$ to over $50\,\text{ms}$. Furthermore, distributed applications must synchronize state (such as database replication or consensus heartbeats) across the datacenter network.
-
-The core challenge assigned to Group 3—**Cloud Task Placement**—is to assign tasks to physical servers such that **average client access latency and inter-replica synchronization cost are jointly minimized**, while strictly **satisfying server capacity limits**.
-
-In early iterations of our model, candidate tasks were only considered on their single best-latency server, causing tasks to crowd onto 1–2 nodes while leaving the rest of the fleet idle (~4% utilization). Additionally, losing tasks were charged a worst-case fallback penalty, and the Minimum Spanning Tree (MST) was not integrated into placement decisions.
-
-To resolve these limitations, this project implements a revised model:
-- **Iterative Knapsack Bidding**: Tasks can be placed on *any* server with sufficient residual capacity. In each round, unplaced tasks bid on their best feasible server using a **regret-based benefit** (the penalty incurred if forced to settle for their next-best feasible alternative). Each server resolves incoming bids using an exact 0-1 Knapsack Dynamic Program (or greedy ratio heuristic). Winning tasks are scheduled, and rejected tasks re-propose in subsequent rounds until all fit or fleet capacity is exhausted.
-- **MST Synchronization Integration**: We extract the Minimum Spanning Tree backbone of the network and determine its **traffic-weighted median node** as a designated centralized synchronization hub. A placed task incurs a state replication cost proportional to its replication traffic volume and its tree path distance to this hub along the MST. A configurable parameter $\lambda$ balances client access latency against backend replication overhead.
-- **Fair Baseline Benchmarking**: We evaluate placements against four distinct baselines: an **Unconstrained Lower Bound** (where every task gets its ideal server ignoring capacity), **Iterative Greedy Rounds** (using the same proposal loop with greedy density selection), **Simple Spill-Over Greedy** (largest traffic first, placing on the best available server with room), and **Random Feasible Placement**. Unplaced tasks are tracked explicitly and never charged fictitious latencies.
-
-All core algorithms are implemented from scratch in pure Python without third-party graph solvers.
+### 1.1 Algorithmic Scope & Core Objectives
+We develop a composite algorithmic pipeline implemented strictly from scratch in pure Python:
+- **Backbone Synthesis**: Exact MST via Kruskal / Prim to establish a minimal-cost communication backbone.
+- **Shortest Path Routing**: SSSP and APSP matrices via Dijkstra, Bellman-Ford, and Floyd-Warshall.
+- **Combinatorial Resource Allocation**: Server-level task selection via 0-1 Knapsack DP with multi-round opportunity regret coordination.
 
 ---
 
 ## 2. Literature Survey
 
-The algorithmic foundation of cloud placement, network routing, and facility location spans several decades of research:
-
-### 2.1 Spanning Tree Algorithms in Network Backbone Design
-Constructing cycle-free, minimum-latency backbones traces back to early algorithms by Borůvka (1926), Kruskal (1956), and Prim (1957). In physical networks, redundant links provide fault tolerance but can cause broadcast loops and coordination storms. An MST identifies the minimum-cost connected subgraph. In cloud fabrics and distributed consensus systems, spanning trees provide minimum-delay multicast trees for leader election and state synchronization.
-
-### 2.2 Shortest Path Routing in Multi-Region Networks
-Routing requests across networks with non-negative propagation delays relies primarily on Dijkstra’s Single-Source Shortest Path (SSSP) algorithm (1959). When augmented with an indexed min-heap priority queue, Dijkstra runs in $\mathcal{O}((V + E) \log V)$ time and underpins link-state routing protocols such as OSPF. The Bellman-Ford algorithm (1958) accommodates arbitrary weights and detects negative-weight cycles in $\mathcal{O}(V \cdot E)$ time. For all-pairs shortest paths (APSP), Floyd-Warshall (1962) computes minimal paths across all $V^2$ pairs via dynamic programming in $\mathcal{O}(V^3)$ time, establishing a benchmark for static routing tables.
-
-### 2.3 Facility Location and Virtual Machine Placement
-The problem of placing service replicas close to distributed clients under capacity limits is closely related to the classical **Capacitated Facility Location Problem (CFLP)** and the **$k$-Median Problem**, in which facilities are chosen to minimize distance from clients to their nearest facility (Shmoys et al., 1997 `[verify]`; Korte & Vygen, 2018 `[verify]`). In cloud computing, research on traffic-aware virtual machine placement focuses on co-locating communicating VMs and placing latency-sensitive instances near ingress gateways to reduce network traffic and SLA violations (Meng et al., 2010 `[verify]`; Karve et al., 2006 `[verify]`). While general multi-server assignment with multi-dimensional resource vectors is strongly NP-hard (Garey & Johnson, 1979), decomposing the assignment into per-server 0-1 knapsack subproblems allows dynamic programming to find locally optimal subset allocations in pseudo-polynomial time.
+The challenge of placing service replicas and virtual machines (VMs) close to distributed users while observing infrastructure bounds intersects multiple classical combinatorial optimization domains. The problem is closely related to the **Capacitated Facility Location Problem (CFLP)** and the **$k$-Median Problem**, in which facilities are opened and clients assigned to minimize joint operational and transit costs (Shmoys et al., 1997 `[verify]`; Korte & Vygen, 2018 `[verify]`). In cloud computing, research on traffic-aware virtual machine placement focuses on co-locating communicating services and placing latency-sensitive instances near ingress gateways to reduce core network congestion and SLA violations (Meng et al., 2010 `[verify]`; Karve et al., 2006 `[verify]`). While general multi-server assignment under vector capacity constraints is strongly NP-hard (Garey & Johnson, 1979), decomposing the multi-server coordination problem into iterative bidding rounds allows individual server subproblems to be solved via 0-1 Knapsack Dynamic Programming in pseudo-polynomial time (Cormen et al., 2022).
 
 ---
 
 ## 3. Software Requirements Specification (SRS)
 
-### 3.1 Scope and Objectives
-The Cloud Task Placement Suite ingests network topologies and workload profiles, synthesizes MST synchronization backbones and shortest-path routing tables, and generates server placement decisions, fleet capacity allocations, and comparative performance benchmarks.
+### 3.1 Functional Requirements (FR)
+- **FR1 (Fleet Modeling & Topology Generation)**: Represent physical networks as undirected weighted graphs $G = (V, E)$ supporting integer server capacities $C_v$ and link latencies $w(u, v) > 0$, with JSON serialization and reproducible synthetic generation.
+- **FR2 (Backbone Synthesis)**: Identify the exact Minimum Spanning Tree (MST) using from-scratch Kruskal's (with Disjoint Set Union) and Prim's (with custom binary min-heap) algorithms.
+- **FR3 (Routing Matrix Precomputation)**: Compute all-pairs shortest paths $D[u, v]$ via Floyd-Warshall and Repeated Dijkstra, and single-source paths via Bellman-Ford (with negative-cycle detection).
+- **FR4 (Opportunity Regret & Multi-Round Knapsack Placement)**: Coordinate fleet placement through iterative bidding rounds where oversubscribed servers solve 0-1 Knapsack DP using regret benefit $\Delta J(t_j, s) = J(t_j, s_2) - J(t_j, s_1)$.
+- **FR5 (Multi-Strategy Benchmarking)**: Compare Knapsack DP against an Unconstrained Lower Bound, Greedy Rounds, Spill-Over Greedy, Random Placement, and an exact Brute-Force Assignment solver on tiny instances.
+- **FR6 (Fleet Metrics & Auditing)**: Report placed and unplaced tasks, fleet-wide capacity utilization, average client access latency, and MST replication sync delay without charging artificial penalties.
 
-### 3.2 Assumptions & System Boundaries
-- **Static Network Snapshots**: Network link latencies represent average propagation and transmission delays over the planning window.
-- **Non-Negative Link Weights**: Propagation latencies across physical links are strictly non-negative ($w(u, v) \ge 0$).
-- **Atomic Placement**: Tasks represent discrete containers or VM instances and cannot be fractionally divided across multiple servers.
-- **Single Host Assignment**: Each service task is hosted on exactly one physical server node.
-- **Transparent Reporting**: If the fleet is saturated and tasks cannot be placed, they are recorded explicitly in an unplaced list rather than silently assigned arbitrary penalties.
-
-### 3.3 Functional Requirements
-- **FR-1 (Topology Ingestion & Generation)**: Ingest JSON topology specifications or generate synthetic cloud networks with configurable node counts $|V|$, edge density $p$, latency ranges, and server capacities.
-- **FR-2 (MST Backbone & Sync Hub Engine)**: Implement Kruskal’s and Prim’s algorithms from scratch, construct the MST backbone, and identify the traffic-weighted median server as the central replication hub.
-- **FR-3 (Shortest Path Routing Engine)**: Implement Dijkstra (with custom min-heap), Bellman-Ford (with negative cycle detection), and Floyd-Warshall to generate complete routing lookup tables.
-- **FR-4 (Iterative Knapsack Placement Engine)**: Implement a multi-round bidding engine where unplaced tasks bid on their best feasible server with regret-based benefit, and servers resolve bids via 0-1 Knapsack DP.
-- **FR-5 (Baseline Comparison Suite)**: Evaluate the primary DP model alongside an Unconstrained Lower Bound, Iterative Greedy Rounds, Simple Spill-Over Greedy, and Random Feasible Placement.
-- **FR-6 (Fractional Knapsack Upper Bound)**: Implement a fractional knapsack relaxation to provide an exact theoretical upper bound on per-server knapsack values.
-
-### 3.4 Non-Functional Requirements
-- **NFR-1 (Algorithmic Independence)**: All core graph representations, heaps, union-find structures, and optimizers must be implemented from scratch without third-party algorithm libraries (NetworkX is restricted strictly to unit tests).
-- **NFR-2 (Execution Efficiency)**: Graph algorithms must execute in sub-second times on graphs up to $|V| = 200$.
-- **NFR-3 (Determinism & Reproducibility)**: Experiments must accept explicit seeds to ensure statistical reproducibility across trials.
-- **NFR-4 (Correctness Verification)**: Custom algorithms must pass automated unit tests cross-verifying outputs against NetworkX reference implementations and brute-force searches on small inputs.
+### 3.2 Non-Functional Requirements & Boundary Scope
+- **NFR1 (Zero External Solvers)**: All graph primitives, min-heaps, DSU, shortest paths, and knapsack DP modules must be implemented strictly from scratch in pure Python.
+- **NFR2 (Algorithmic Correctness & Reproducibility)**: Verified via automated unit tests cross-checked against NetworkX and exact combinatorial solvers under fixed random seeds.
+- **NFR3 (Computational Scalability)**: Routing and placement subproblems must execute in sub-second times on networks up to $|V| = 200$.
+- **Boundary Assumptions**: Workloads represent discrete scheduling epochs; server capacities and task demands are non-negative scalar integers; link latencies are strictly positive and symmetric ($w(u, v) = w(v, u) > 0$); transient router queuing delays and vector packing dimensions (e.g. GPU, I/O) are outside the current scope.
 
 ---
 
 ## 4. Project Plan & Milestones
 
-The project was executed in structured iterative sprints:
-
-| Phase | Milestone | Focus Areas & Deliverables | Status |
-|---|---|---|---|
-| **Phase 1** | **Sprint 1** | Problem formulation, SRS specification, graph data structure, synthetic topology generator, and sample datasets (`small`, `medium`, `large`). | **Complete** |
-| **Phase 2** | **Sprint 2** | Implementation of custom Indexed Min-Heap, Disjoint Set Union (DSU), MST suite (Prim, Kruskal), Shortest Path suite (Dijkstra, Bellman-Ford, Floyd-Warshall), and NetworkX unit tests. | **Complete** |
-| **Phase 3** | **Sprint 3** | Implementation of 0-1 Knapsack DP with item backtracking, greedy ratio scheduler, fractional knapsack relaxation, and brute-force validator. | **Complete** |
-| **Phase 4** | **Sprint 4** | Redesign of placement model to multi-round regret bidding, MST sync hub integration, multi-strategy benchmarking, and comprehensive property tests. | **Complete** |
-| **Phase 5** | **Sprint 5** | 10-seed empirical benchmarking across capacity multipliers, workloads, network densities, and $\lambda$ weights; updated runnable demo and executed dashboard notebook. | **Complete** |
+The project was executed across six sequential engineering milestones:
+1. **Phase 1 (Graph Primitives & Datasets)**: Adjacency-list `Graph`, reproducible topology generator, JSON I/O, unit test framework (*Completed*).
+2. **Phase 2 (MST Backbone & Routing Suite)**: Custom `MinHeap`, `DSU`, Kruskal, Prim, Dijkstra, Bellman-Ford, Floyd-Warshall (*Completed*).
+3. **Phase 3 (Combinatorial Schedulers & Knapsack DP)**: 0-1 Knapsack DP, Greedy Ratio heuristic, fractional upper bound, tiny brute-force solver (*Completed*).
+4. **Phase 4 (Placement Optimizer Pipeline)**: `CloudPlacementOptimizer`, regret benefit bidding rounds, MST sync hub, `run_demo.py` (*Completed*).
+5. **Phase 5 (Empirical Benchmarking & Evaluation)**: 10-repeat runtime scaling, 10-seed sensitivity sweeps, CSV logs, publication plots (*Completed*).
+6. **Phase 6 (Interactive Dashboard & Technical Documentation)**: Self-contained Jupyter Notebook (`placement_dashboard.ipynb`) and Technical Report (*Completed*).
 
 ---
 
-## 5. Mathematical Modeling & System Formulation
+## 5. Mathematical Modeling & Problem Formulation
 
-We model the cloud network as an undirected, edge-weighted graph $G = (V, E, W, C)$.
+### 5.1 Infrastructure and Workload Model
+The physical cloud network is modeled as an undirected, connected, weighted graph $G = (V, E)$, where each vertex $v \in V$ represents a server with compute capacity $C_v \in \mathbb{Z}^+$, and each edge $(u, v) \in E$ has latency $w(u, v) \in \mathbb{R}^+$. The workload comprises $n$ independent tasks $T = \{t_1, t_2, \dots, t_n\}$, where each task is defined by a tuple $t_j = (u_j, d_j, \tau_j, \rho_j)$:
+- $u_j \in V$: Client ingress node where requests enter the cloud.
+- $d_j \in \mathbb{Z}^+$: Discrete compute capacity demand.
+- $\tau_j \in \mathbb{R}^+$: Access traffic volume from the client ingress node.
+- $\rho_j \in \mathbb{R}^+$: State replication traffic volume required across the backbone.
 
-### 5.1 Network Topology Model
-- **Server Nodes ($V$)**: The set of $n = |V|$ physical server nodes, indexed $v \in \{0, 1, \dots, n-1\}$.
-- **Node Capacities ($C$)**: Each server $v \in V$ has an integer capacity $C_v \in \mathbb{Z}^+$ (representing available compute/RAM slots).
-- **Physical Links ($E$)**: The set of $m = |E|$ physical communication links connecting servers.
-- **Link Latencies ($W$)**: Each link $(u, v) \in E$ has latency $w(u, v) = w(v, u) \ge 0$ in milliseconds.
+**Flexible Hosting Assumption**: A task $t_j$ may be hosted on **any server** $s \in V$ provided $s$ has sufficient remaining capacity: $F(t_j) = \{s \in V \mid c_s \ge d_j\}$.
 
-### 5.2 Workload and Request Traffic Model
-The workload consists of $k$ tasks $T = \{t_1, t_2, \dots, t_k\}$:
-- **Resource Demand ($d_j$)**: Task $t_j$ requires $d_j \in \mathbb{Z}^+$ units of capacity on its host server.
-- **Client Request Traffic ($\lambda_{u, j}$)**: Clients at node $u \in V$ send requests to task $t_j$ at rate $\lambda_{u, j} \ge 0$ (requests/sec). Total client traffic for task $t_j$ is $\Lambda_j = \sum_{u \in V} \lambda_{u, j}$.
-- **Replication Traffic ($\rho_j$)**: Task $t_j$ generates state synchronization traffic $\rho_j \ge 0$ across the network backbone.
+### 5.2 Composite Objective Function & MST Synchronization Hub
+Assigning task $t_j$ to candidate server $s$ incurs two distinct communication costs:
+1. **Client Access Latency**: Requests travel across the shortest physical path from ingress $u_j$ to host $s$: $\text{Access}(t_j, s) = \tau_j \cdot D[u_j, s]$, where $D[u_j, s]$ is the all-pairs shortest-path distance.
+2. **Replication Synchronization Cost**: State updates travel along the MST communication backbone $T_{\text{MST}}$ to a designated centralized **Sync Hub** $h^*$: $\text{Sync}(t_j, s) = \rho_j \cdot D_{\text{MST}}[s, h^*]$, where $D_{\text{MST}}[s, h^*]$ is tree path distance.
 
-### 5.3 Formulation of Average Latency and Composite Cost
-Let $D[u, v]$ denote the shortest path distance in $G$, and let $D_{\text{MST}}[u, v]$ denote the path distance along the Minimum Spanning Tree backbone $T_{\text{MST}}$.
+The **Sync Hub** $h^*$ is uniquely chosen as the **traffic-weighted median node** of the MST backbone:
+$$h^* = \arg\min_{m \in V} \sum_{v \in V} w_v \cdot D_{\text{MST}}[v, m]$$
 
-1. **Traffic-Weighted Median Sync Hub ($h^*$)**:  
-   Each node $v \in V$ is assigned a traffic weight $w_v = 1.0 + \sum_{j=1}^k \lambda_{v, j}$. The designated synchronization hub $h^*$ is the weighted median node of the MST:
-   $$h^* = \arg\min_{m \in V} \sum_{v \in V} w_v \cdot D_{\text{MST}}[v, m]$$
+The composite placement cost of task $t_j$ on server $s$ is governed by weight parameter $\lambda \ge 0$:
+$$J(t_j, s) = \tau_j \cdot D[u_j, s] + \lambda \cdot \rho_j \cdot D_{\text{MST}}[s, h^*]$$
+When $\lambda = 0$, the objective models pure client access latency; as $\lambda$ increases, it penalizes host servers distant from the central replication hub.
 
-2. **Access Latency and Sync Cost**:  
-   If task $t_j$ is placed on server $s \in V$:
-   - **Per-request access latency**:
-     $$L(t_j, s) = \frac{1}{\Lambda_j} \sum_{u \in V} \lambda_{u, j} \cdot D[u, s]$$
-   - **Synchronization cost**:
-     $$S(t_j, s) = \rho_j \cdot D_{\text{MST}}[s, h^*]$$
-   - **Composite task-server cost**:
-     $$J(t_j, s) = \left(\sum_{u \in V} \lambda_{u, j} \cdot D[u, s]\right) + \lambda \cdot S(t_j, s)$$
-     where $\lambda \ge 0$ is a configurable penalty weight. When $\lambda = 0$, the formulation reduces to pure access latency.
+### 5.3 Opportunity Regret Benefit Formulation
+If multiple tasks compete for a server with finite capacity, the benefit of accepting task $t_j$ on server $s_1$ is defined as its **opportunity regret**—the performance penalty incurred if $t_j$ is rejected from $s_1$ and forced to settle for its next-best feasible alternative $s_2$:
+$$\Delta J(t_j, s_1) = J(t_j, s_2) - J(t_j, s_1)$$
+Where $s_1 = \arg\min_{s \in F(t_j)} J(t_j, s)$ and $s_2 = \arg\min_{s \in F(t_j) \setminus \{s_1\}} J(t_j, s)$. If only one feasible server remains, $J(t_j, s_2)$ is assigned a conservative displacement bound.
 
-3. **Fleet-Wide Average Access Latency**:  
-   Computed strictly across all placed tasks $T_{\text{placed}} \subseteq T$:
-   $$\bar{L}_{\text{access}} = \frac{\sum_{t_j \in T_{\text{placed}}} \sum_{u \in V} \lambda_{u, j} \cdot D[u, \text{host}(t_j)]}{\sum_{t_j \in T_{\text{placed}}} \Lambda_j}$$
+### 5.4 Iterative Multi-Round Bidding Coordination
+Placement operates via synchronous bidding rounds:
+1. **Proposal Phase**: Each unplaced task $t_j$ identifies its best feasible server $s_1 \in F(t_j)$ and submits a bid with weight $d_j$ and value $\Delta J(t_j, s_1)$.
+2. **Local Knapsack Optimization**: Each server $s$ reviews its received bids $B_s$. If $\sum_{t \in B_s} d_t \le c_s$, all bids are accepted. Otherwise, server $s$ executes **0-1 Knapsack DP** over $B_s$ to choose the subset maximizing total regret benefit subject to remaining capacity $c_s$.
+3. **Commit & Re-Bidding**: Accepted tasks are bound to server $s$, reducing $c_s$ by $d_j$. Rejected tasks update their feasible candidate sets $F(t_j) \leftarrow F(t_j) \setminus \{s\}$ and re-bid in the subsequent round. Rounds terminate when all tasks are placed or no tasks fit in remaining capacity.
 
-### 5.4 Capacity Constraints
-Let binary variable $x_{j, v} \in \{0, 1\}$ indicate if task $t_j$ is placed on server $v$:
-$$\sum_{j=1}^{k} x_{j, v} \cdot d_j \le C_v \quad \forall v \in V, \qquad \sum_{v \in V} x_{j, v} \le 1 \quad \forall t_j \in T$$
-
-### 5.5 Iterative Knapsack Rounds & Regret-Benefit Formulation
-Rather than restricting each task to a single server candidate, tasks are eligible for any server with remaining capacity:
-1. **Feasible Server Set**: In round $r$, for unplaced task $t_j$, its feasible server set is $F(t_j) = \{s \in V \mid \text{rem\_cap}(s) \ge d_j\}$.
-2. **Proposals & Regret Benefit**: Task $t_j$ identifies its best feasible server $s_1 = \arg\min_{s \in F(t_j)} J(t_j, s)$ and its runner-up server $s_2 = \arg\min_{s \in F(t_j) \setminus \{s_1\}} J(t_j, s)$. It submits a bid to $s_1$ with benefit equal to its **opportunity regret**:
-   $$\text{Benefit}(t_j, s_1) = J(t_j, s_2) - J(t_j, s_1)$$
-   If only one feasible server remains ($|F(t_j)| = 1$), its benefit is set to $(\max_{v \in V} J(t_j, v) - J(t_j, s_1)) + 10.0$ to ensure high priority before being dropped.
-3. **Local Admission**: Each server $s$ solves a 0-1 Knapsack DP over all proposals submitted to it in round $r$ subject to $\text{rem\_cap}(s)$.
-4. **Progression**: Accepted tasks take capacity; rejected tasks re-propose in round $r+1$. The loop halts when all tasks are placed or no task fits on any server.
-
-### 5.6 Baseline Placement Strategies & Fair Comparison
-We compare the primary model against four standardized baselines:
-- **Unconstrained Lower Bound**: Places every task at its globally ideal server $\arg\min_{s \in V} J(t_j, s)$ ignoring capacities. This serves as a mathematical lower bound that no valid placement can beat.
-- **Iterative Greedy Rounds**: Uses the identical multi-round proposal loop, but servers select tasks using greedy density order ($\text{benefit}/d_j$).
-- **Simple Spill-Over Greedy**: Sorts tasks in descending order of total traffic $\Lambda_j$; each task is assigned to its best server with available room, spilling over to the next best if full.
-- **Random Feasible Placement**: Tasks are placed uniformly at random on servers with available room, providing an honest unoptimized baseline.
-- **Brute-Force Optimal**: On small benchmark instances ($\le 7$ tasks, $\le 6$ servers), an exhaustive search across all $(m+1)^k$ assignments verifies the exact optimality gap.
+### 5.5 Fair Comparison Strategies
+To evaluate solution quality without artificial straw-man baselines, we benchmark:
+1. **Unconstrained Lower Bound**: Every task is placed on its ideal server $s^* = \arg\min_{s \in V} J(t_j, s)$ ignoring capacity constraints ($\sum d_j > C_v$ allowed).
+2. **Knapsack DP Rounds (Proposed)**: Multi-round bidding with 0-1 Knapsack DP per server.
+3. **Greedy Rounds**: Identical bidding loop, but servers select tasks using the greedy efficiency ratio $\frac{\Delta J(t_j, s)}{d_j}$.
+4. **Spill-Over Greedy**: Tasks sorted globally by total traffic $(\tau_j + \lambda \rho_j)$ and assigned first-fit to their best server with remaining capacity.
+5. **Random Feasible Placement**: Tasks assigned to a randomly selected server with sufficient room.
+6. **Exact Brute-Force Assignment Solver**: Explores all $(|V|+1)^n$ candidate allocations on small instances ($\le 6$ tasks, $\le 5$ servers) to compute exact global optimality gaps.
 
 ---
 
-## 6. Algorithmic Architecture & Complexity Analysis
+## 6. Algorithmic Choices & Asymptotic Complexity
 
-```
-                       [ Network Graph G = (V, E) ]
-                                    |
-                 +------------------+------------------+
-                 |                                     |
-         [ Kruskal's MST ]                     [ Floyd-Warshall APSP ]
-                 |                                     |
-      MST Backbone Tree T                     Shortest Path Distances D[u, v]
-                 |                                     |
-       Traffic-Weighted Median                         |
-          Sync Hub h*                                  |
-                 |                                     |
-                 +------------------+------------------+
-                                    |
-            Composite Cost Function: J(t, s) = Access(t, s) + λ * Sync(t, s)
-                                    |
-                      [ Iterative Knapsack Loop ]
-       +-------------------------------------------------------+
-       | Round r:                                              |
-       | 1. Filter servers with rem_cap >= demand(t)           |
-       | 2. Unplaced tasks bid on best server s1               |
-       | 3. Benefit = Regret = J(t, s2) - J(t, s1)             |
-       | 4. Each server solves 0-1 Knapsack DP on proposals    |
-       | 5. Accepted tasks lock capacity; losers re-propose    |
-       +-------------------------------------------------------+
-                                    |
-       +----------------------------+--------------------------+
-       |                            |                          |
-   [ DP Rounds ]            [ Greedy Rounds ]          [ Spillover Greedy ]
-       |                            |                          |
-       +----------------------------+--------------------------+
-                                    |
-             [ Multi-Strategy Benchmark & Utilization Report ]
-```
+All algorithmic components are implemented from scratch in pure Python using custom data structures.
 
-### 6.1 Custom Fundamental Data Structures
-To eliminate external dependencies, two foundational data structures were implemented from scratch:
-1. **Disjoint Set Union (DSU / Union-Find)** ([`src/graph/disjoint_set.py`](src/graph/disjoint_set.py)):
-   - Implements **path compression** in `find()` and **union by rank** in `union()`.
-   - Any sequence of $m$ operations on $n$ elements executes in $\mathcal{O}(m \cdot \alpha(n))$ time, where $\alpha$ is the inverse Ackermann function ($\alpha(n) \le 4$ for all practical inputs).
-2. **Indexed Binary Min-Heap** ([`src/graph/min_heap.py`](src/graph/min_heap.py)):
-   - Stores elements in a binary heap array augmented with a reverse hash map `_pos: Dict[item, index]`.
-   - Provides $\mathcal{O}(\log N)$ `push`, $\mathcal{O}(\log N)$ `pop_min`, and $\mathcal{O}(\log N)$ `decrease_key` operations.
+| Algorithmic Component | Module File | Asymptotic Time Complexity | Auxiliary Space |
+|:---|:---|:---:|:---:|
+| **Kruskal's MST** | `src/mst/kruskal.py` | $\mathcal{O}(E \log E)$ | $\mathcal{O}(V + E)$ |
+| **Prim's MST** | `src/mst/prim.py` | $\mathcal{O}(E \log V)$ | $\mathcal{O}(V)$ |
+| **Dijkstra's SSSP** | `src/shortest_paths/dijkstra.py` | $\mathcal{O}(E \log V)$ | $\mathcal{O}(V)$ |
+| **Bellman-Ford SSSP** | `src/shortest_paths/bellman_ford.py` | $\mathcal{O}(V \cdot E)$ | $\mathcal{O}(V)$ |
+| **Floyd-Warshall APSP** | `src/shortest_paths/floyd_warshall.py` | $\mathcal{O}(V^3)$ | $\mathcal{O}(V^2)$ |
+| **Repeated Dijkstra APSP** | `src/shortest_paths/dijkstra.py` | $\mathcal{O}(V \cdot E \log V)$ | $\mathcal{O}(V^2)$ |
+| **0-1 Knapsack DP** | `src/placement/knapsack_dp.py` | $\mathcal{O}(n \cdot W)$ *(pseudo-polynomial)* | $\mathcal{O}(W)$ |
+| **Greedy Scheduler** | `src/placement/greedy_scheduler.py` | $\mathcal{O}(n \log n)$ | $\mathcal{O}(n)$ |
 
-### 6.2 Minimum Spanning Tree (MST): Kruskal vs. Prim
-- **Kruskal's Algorithm** ([`src/mst/kruskal.py`](src/mst/kruskal.py)):
-  1. Sort all undirected edges by latency: $\mathcal{O}(E \log E) = \mathcal{O}(E \log V)$.
-  2. Iterate through edges, calling `dsu.union(u, v)`. Edge $(u, v)$ is admitted if and only if it connects disjoint components.
-  - **Time Complexity**: $\mathcal{O}(E \log V)$. **Space Complexity**: $\mathcal{O}(V + E)$.
-- **Prim's Algorithm** ([`src/mst/prim.py`](src/mst/prim.py)):
-  1. Maintain cut $(S, V \setminus S)$. Store vertices in an indexed min-heap keyed by minimal connecting edge weight to $S$.
-  2. Repeatedly extract min vertex $u$, add to $S$, and update keys of adjacent vertices using `heap.decrease_key`.
-  - **Time Complexity**: $\mathcal{O}((V + E) \log V)$. **Space Complexity**: $\mathcal{O}(V)$.
-
-### 6.3 Shortest Path Routing Suite
-- **Dijkstra’s Algorithm (SSSP)** ([`src/shortest_paths/dijkstra.py`](src/shortest_paths/dijkstra.py)):
-  - Computes single-source shortest paths on non-negative edges using our indexed Min-Heap.
-  - **Time Complexity**: $\mathcal{O}((V + E) \log V)$. **Space**: $\mathcal{O}(V)$.
-- **Bellman-Ford Algorithm (SSSP with Negative Cycle Detection)** ([`src/shortest_paths/bellman_ford.py`](src/shortest_paths/bellman_ford.py)):
-  - Relaxes all $|E|$ edges through $|V| - 1$ passes, with an early-stopping check if no edge relaxes during a pass.
-  - Runs a $|V|$-th verification pass: if any edge still relaxes, it raises `NegativeCycleError`.
-  - **Time Complexity**: Worst-case $\mathcal{O}(V \cdot E)$, Best-case $\mathcal{O}(E)$. **Space**: $\mathcal{O}(V)$.
-- **Floyd-Warshall Algorithm (APSP)** ([`src/shortest_paths/floyd_warshall.py`](src/shortest_paths/floyd_warshall.py)):
-  - Computes all-pairs shortest paths via dynamic programming across intermediate vertices $k \in V$.
-  - Recurrence: $D^{(k)}[i][j] = \min\left(D^{(k-1)}[i][j], D^{(k-1)}[i][k] + D^{(k-1)}[k][j]\right)$.
-  - **Time Complexity**: $\mathcal{O}(V^3)$. **Space**: $\mathcal{O}(V^2)$.
-
-### 6.4 Placement Optimization: Iterative Knapsack DP vs. Greedy Rounds
-- **0-1 Knapsack DP Engine** ([`src/placement/knapsack_dp.py`](src/placement/knapsack_dp.py)):
-  - For candidate proposals on server $s$, table $dp[i][w]$ computes maximum regret benefit for the first $i$ proposals under remaining capacity $w \in [0, C_s]$:
-    $$dp[i][w] = \begin{cases} 
-      dp[i-1][w] & \text{if } d_{i-1} > w \\
-      \max\left(dp[i-1][w], dp[i-1][w - d_{i-1}] + B_{i-1}\right) & \text{otherwise}
-    \end{cases}$$
-  - A backtracking pointer recovers the exact winning tasks.
-  - **Time Complexity**: $\mathcal{O}(n \cdot C_s)$ pseudo-polynomial time. **Space**: $\mathcal{O}(n \cdot C_s)$.
-- **Fractional Knapsack Upper Bound** ([`src/placement/greedy_scheduler.py`](src/placement/greedy_scheduler.py)):
-  - Computes continuous knapsack relaxation taking fractional pieces of the boundary item. Validates the invariant:
-    $$\text{Value}(\text{0-1 DP}) \le \text{Value}(\text{Fractional Relaxation})$$
-  - **Time Complexity**: $\mathcal{O}(n \log n)$. **Space**: $\mathcal{O}(n)$.
-
-### 6.5 Asymptotic Complexity Comparison Matrix
-
-| Algorithmic Component | Module File | Asymptotic Time Complexity | Space Complexity | Paradigm |
-|---|---|---|---|---|
-| **Disjoint Set Union** | [`src/graph/disjoint_set.py`](src/graph/disjoint_set.py) | $\mathcal{O}(\alpha(V))$ per operation | $\mathcal{O}(V)$ | Tree with Rank/Path Compression |
-| **Indexed Min-Heap** | [`src/graph/min_heap.py`](src/graph/min_heap.py) | Push/Pop/Decrease-Key: $\mathcal{O}(\log N)$ | $\mathcal{O}(N)$ | Array Binary Heap + Hash Map |
-| **Kruskal's MST** | [`src/mst/kruskal.py`](src/mst/kruskal.py) | $\mathcal{O}(E \log V)$ | $\mathcal{O}(V + E)$ | Greedy |
-| **Prim's MST** | [`src/mst/prim.py`](src/mst/prim.py) | $\mathcal{O}((V + E) \log V)$ | $\mathcal{O}(V)$ | Greedy with Priority Queue |
-| **Dijkstra SSSP** | [`src/shortest_paths/dijkstra.py`](src/shortest_paths/dijkstra.py) | $\mathcal{O}((V + E) \log V)$ | $\mathcal{O}(V)$ | Greedy with Priority Queue |
-| **Bellman-Ford SSSP** | [`src/shortest_paths/bellman_ford.py`](src/shortest_paths/bellman_ford.py) | $\mathcal{O}(V \cdot E)$ | $\mathcal{O}(V)$ | Edge Relaxation |
-| **Floyd-Warshall APSP** | [`src/shortest_paths/floyd_warshall.py`](src/shortest_paths/floyd_warshall.py) | $\mathcal{O}(V^3)$ | $\mathcal{O}(V^2)$ | Dynamic Programming |
-| **Repeated Dijkstra APSP**| Benchmark | $\mathcal{O}(V \cdot (V + E) \log V)$ | $\mathcal{O}(V^2)$ | Repeated SSSP |
-| **0-1 Knapsack Placement** | [`src/placement/knapsack_dp.py`](src/placement/knapsack_dp.py) | $\mathcal{O}(n \cdot W)$ (pseudo-polynomial) | $\mathcal{O}(n \cdot W)$ | Dynamic Programming |
-| **Greedy Ratio Scheduler** | [`src/placement/greedy_scheduler.py`](src/placement/greedy_scheduler.py) | $\mathcal{O}(n \log n)$ | $\mathcal{O}(n)$ | Greedy Approximation |
-| **Fractional Knapsack** | [`src/placement/greedy_scheduler.py`](src/placement/greedy_scheduler.py) | $\mathcal{O}(n \log n)$ | $\mathcal{O}(n)$ | Continuous Greedy Relaxation |
+*Implementation Highlights*: Kruskal uses custom `DSU` with path compression and union-by-rank ($\mathcal{O}(\alpha(V))$ per operation). Prim and Dijkstra use our custom indexed binary `MinHeap` with decrease-key capability. For all-pairs routing on sparse graphs ($E \ll V^2$), Repeated Dijkstra asymptotically dominates Floyd-Warshall's $\mathcal{O}(V^3)$ loops. The 0-1 Knapsack DP operates in **pseudo-polynomial** time ($\mathcal{O}(n \cdot 2^b)$ where $b = \lceil \log_2 W \rceil$), executing in sub-millisecond times for integer capacity limits ($W \le 500$).
 
 ---
 
 ## 7. Correctness Proof Sketches
 
 ### 7.1 Cut Property for Minimum Spanning Trees
-**Theorem (The Cut Property)**: Let $G = (V, E)$ be a connected, undirected graph with real edge weights. Let $(S, V \setminus S)$ be any partition (cut) of vertices $V$. If edge $e = (u, v)$ is a minimum-weight edge crossing the cut $(u \in S, v \in V \setminus S)$, then $e$ belongs to some Minimum Spanning Tree of $G$.
+**Theorem**: Let $G = (V, E)$ be a connected, undirected graph with real edge weights. Let $(S, V \setminus S)$ be any cut that respects a subset of edges $A \subseteq T_{\text{MST}}$. If $e = (u, v)$ is a light edge crossing $(S, V \setminus S)$, then $e$ belongs to an MST.
 
-*Proof Sketch by Exchange Argument*:  
-Suppose for contradiction that $e$ is not in a given MST $T^*$. Because $T^*$ is a spanning tree, there exists a unique simple path $P$ in $T^*$ connecting $u$ and $v$. Since $u \in S$ and $v \in V \setminus S$, the path $P$ must cross the cut at least once via some other edge $e' = (x, y) \neq e$ where $x \in S$ and $y \in V \setminus S$.  
-Now construct a new spanning subgraph $T' = (T^* \setminus \{e'\}) \cup \{e\}$. Removing $e'$ disconnects $T^*$ into two components; adding $e$ reconnects them without creating cycles, making $T'$ a valid spanning tree. The total weight of $T'$ is:
-$$w(T') = w(T^*) - w(e') + w(e)$$
-Since $e$ is a minimum-weight edge crossing the cut, $w(e) \le w(e')$, which implies $w(T') \le w(T^*)$. Because $T^*$ was assumed to be minimal, we must have $w(T') = w(T^*)$, meaning $T'$ is also an MST containing $e$. Both Kruskal's and Prim's algorithms respect this invariant at every step. $\blacksquare$
+*Proof Sketch*: Suppose $T$ is an MST of $G$ that does not contain $e$. Adding $e$ to $T$ creates a unique simple cycle $C$. Because $u \in S$ and $v \in V \setminus S$, there must exist at least one other edge $e' = (x, y) \in C$ crossing the cut $(S, V \setminus S)$. Construct $T' = (T \setminus \{e'\}) \cup \{e\}$. $T'$ connects all vertices and has $|V|-1$ edges, so $T'$ is a spanning tree. Since $e$ is a light edge across the cut, $w(e) \le w(e')$, implying $w(T') = w(T) - w(e') + w(e) \le w(T)$. Because $T$ is an MST, we must have $w(T') = w(T)$, proving $T'$ is also an MST containing $e$. Both Kruskal and Prim strictly select light edges across respecting cuts, guaranteeing correctness. $\blacksquare$
 
-### 7.2 Relaxation Invariant for Dijkstra's Algorithm
-**Theorem**: When Dijkstra's algorithm extracts vertex $u$ from the priority queue and adds it to the visited set $S$, the stored distance estimate $d[u]$ equals the true shortest path distance $\delta(s, u)$.
+### 7.2 Dijkstra's Relaxation Invariant
+**Theorem**: When Dijkstra's algorithm executes on graph $G$ with non-negative edge weights $w(u, v) \ge 0$, every vertex $u$ added to the finalized set $S$ satisfies $d[u] = \delta(s, u)$.
 
-*Proof Sketch by Induction*:  
-- **Base Case**: At initialization, $S = \{s\}$ and $d[s] = 0 = \delta(s, s)$, which is trivially true.
-- **Inductive Step**: Assume for all $x \in S$, $d[x] = \delta(s, x)$. Let $u \in V \setminus S$ be the next vertex chosen by extract-min. Suppose for contradiction that $d[u] > \delta(s, u)$.  
-Consider an actual shortest path $P$ from $s$ to $u$. Since $s \in S$ and $u \notin S$, there must be a first vertex $y$ along $P$ such that $y \notin S$, preceded by $x \in S$. Because subpaths of shortest paths are shortest paths:
-$$\delta(s, y) = \delta(s, x) + w(x, y)$$
-Because $x \in S$, the edge $(x, y)$ was already relaxed when $x$ was added to $S$. By the induction hypothesis, $d[x] = \delta(s, x)$, so:
-$$d[y] \le d[x] + w(x, y) = \delta(s, y)$$
-Because edge weights are non-negative ($w \ge 0$), the subpath distance to $y$ cannot exceed the distance to $u$: $\delta(s, y) \le \delta(s, u)$. Therefore:
-$$d[y] \le \delta(s, y) \le \delta(s, u) < d[u]$$
-However, Dijkstra’s algorithm greedily selected $u$ from the min-heap instead of $y$, which implies $d[u] \le d[y]$. This contradicts $d[y] < d[u]$. Hence, $d[u] = \delta(s, u)$. $\blacksquare$
+*Proof Sketch*: By induction on $|S|$. Base case $|S|=1$ ($S=\{s\}$) holds with $d[s] = \delta(s, s) = 0$. For the inductive step, let $u$ be the next vertex extracted from $V \setminus S$ minimizing $d[u]$. Suppose for contradiction $d[u] > \delta(s, u)$. Consider an optimal shortest path $P$ from $s$ to $u$. Let $(x, y)$ be the first edge in $P$ where $x \in S$ and $y \in V \setminus S$. Because $x \in S$, the inductive hypothesis ensures $d[x] = \delta(s, x)$. When $x$ was finalized, edge $(x, y)$ was relaxed, ensuring $d[y] = \delta(s, y)$. Since edge weights are non-negative, $\delta(s, y) \le \delta(s, u) < d[u]$. Because $y \in V \setminus S$, the min-heap greedy choice requires $d[u] \le d[y]$, creating a contradiction ($d[u] \le d[y] = \delta(s, y) \le \delta(s, u) < d[u]$). Hence $d[u] = \delta(s, u)$ holds for all extracted vertices. $\blacksquare$
 
-### 7.3 Optimal Substructure & Pseudo-Polynomial Complexity for 0-1 Knapsack
-**Theorem**: The 0-1 Knapsack problem exhibits optimal substructure and is solvable in pseudo-polynomial time.
+### 7.3 Optimal Substructure of 0-1 Knapsack DP
+**Theorem**: Let $S^*$ be an optimal subset of tasks chosen from $\{t_1, \dots, t_i\}$ fitting in capacity $w$. If $t_i \notin S^*$, then $S^*$ is optimal for $\{t_1, \dots, t_{i-1}\}$ with capacity $w$. If $t_i \in S^*$, then $S^* \setminus \{t_i\}$ is optimal for $\{t_1, \dots, t_{i-1}\}$ with capacity $w - c_i$.
 
-*Proof Sketch*:  
-Let $S^*$ be an optimal subset of items from $\{1, \dots, n\}$ maximizing total benefit under capacity limit $W$. Consider item $n$:
-1. **Case 1 ($n \notin S^*$)**: $S^* \subseteq \{1, \dots, n-1\}$. $S^*$ must be an optimal solution for the subproblem on $\{1, \dots, n-1\}$ with capacity $W$. If a strictly better subset $S'$ existed, $S'$ would improve upon $S^*$ for the original problem, contradicting optimality.
-2. **Case 2 ($n \in S^*$)**: The subset $S^* \setminus \{n\}$ must be an optimal solution for the subproblem on $\{1, \dots, n-1\}$ with capacity $W - d_n$. If a better subset $S''$ existed for capacity $W - d_n$, then $S'' \cup \{n\}$ would form a feasible subset for capacity $W$ with strictly greater benefit than $S^*$, again contradicting optimality.
-
-**Complexity Classification**:  
-Filling table $dp[i][w]$ of dimensions $(n+1) \times (W+1)$ requires $\mathcal{O}(n \cdot W)$ basic arithmetic operations. Crucially, this running time is **pseudo-polynomial**, not polynomial. The numeric capacity $W$ requires $b = \lceil \log_2 W \rceil$ bits to represent in binary. Expressed as a function of the input bit length, the time complexity is $\mathcal{O}(n \cdot 2^b)$, which is exponential in the length of $W$. In our application, server capacity values represent small discrete core/memory slots ($W \le 500$), allowing the DP to execute in sub-millisecond times. $\blacksquare$
+*Proof Sketch*: Suppose $t_i \in S^*$ and there exists a subset $S'$ from $\{t_1, \dots, t_{i-1}\}$ with cost $\le w - c_i$ having total benefit strictly greater than $S^* \setminus \{t_i\}$. Then $S' \cup \{t_i\}$ would be feasible for capacity $w$ and have benefit greater than $S^*$, contradicting the optimality of $S^*$. This establishes the Bellman recurrence:
+$$dp[i][w] = \max\left(dp[i-1][w],\; dp[i-1][w - c_i] + b_i\right)$$
+Induction over $i$ and $w$ confirms that table entry $dp[n][W]$ contains the exact maximum benefit. $\blacksquare$
 
 ---
 
 ## 8. Experimental Evaluation & Empirical Results
 
-All experimental benchmarks were conducted on Python 3.14 (Windows 11, AMD Ryzen / Intel Core architecture). To ensure statistical validity:
-- **Placement benchmarks** were executed over **10 random topology + workload seeds** per condition, logging **mean $\pm$ standard deviation**.
-- **Runtime benchmarks** were executed with **10 repeats on fixed topologies** per size.
+All experimental benchmarks were conducted on Python 3.14 (Windows 11, [FILL IN: my actual CPU and RAM]):
+- **Placement benchmarks**: Evaluated over **10 random topology + workload seeds**, reporting **mean $\pm$ std**.
+- **Runtime benchmarks**: Evaluated over **10 repeats on fixed topologies** per size.
+- Full CSV logs and figures reside in [`experiments/results/`](../experiments/results/).
 
-All results and generated plots are stored in [`experiments/results/`](../experiments/results/).
+### 8.1 Algorithmic Runtime Benchmarks (MST, SSSP, APSP)
 
-### 8.1 Testbed Setup & Topologies
-- **Small Topology**: $|V| = 10$, $|E| = 16$, edge cluster network ([`data/small_topology.json`](../data/small_topology.json)).
-- **Medium Topology**: $|V| = 50$, $|E| = 184$, regional datacenter network ([`data/medium_topology.json`](../data/medium_topology.json)).
-- **Large Topology**: $|V| = 200$, $|E| = 995$, multi-region cloud backbone ([`data/large_topology.json`](../data/large_topology.json)).
+#### Table 1: MST Runtime Scaling (Mean ± Std over 10 Repeats)
+| Nodes $\|V\|$ | Sparse $\|E\|$ | Kruskal Sparse (ms) | Prim Sparse (ms) | Dense $\|E\|$ | Kruskal Dense (ms) | Prim Dense (ms) | Dense Speedup |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 10 | 9 | $0.015 \pm 0.009$ | $0.026 \pm 0.012$ | 36 | $0.018 \pm 0.002$ | $0.030 \pm 0.002$ | Prim 0.60x |
+| 50 | 245 | $0.110 \pm 0.007$ | $0.218 \pm 0.005$ | 980 | $0.315 \pm 0.029$ | $0.314 \pm 0.005$ | **Crossover (1.0x)** |
+| 100 | 990 | $0.426 \pm 0.030$ | $0.569 \pm 0.016$ | 3,960 | $1.537 \pm 0.137$ | $0.934 \pm 0.034$ | **Prim 1.64x** |
+| 200 | 3,980 | $2.432 \pm 0.722$ | $2.055 \pm 0.462$ | 15,920 | $6.836 \pm 0.903$ | $3.012 \pm 0.147$ | **Prim 2.27x** |
 
----
+*Finding*: On sparse graphs ($d=0.20$), Kruskal is faster than Prim up to $|V| \approx 150$; at $|V| = 200$ sparse, Prim ($2.06\,\text{ms}$) was slightly faster than Kruskal ($2.43\,\text{ms}$) with overlapping std. On dense graphs ($d=0.80$), a clear crossover occurs at $|V|=50$, beyond which Prim's $\mathcal{O}(E \log V)$ dominates Kruskal's $\mathcal{O}(E \log E)$ edge-sorting ($2.27\times$ faster at $|V|=200$). *(Full data: `mst_runtime_comparison.csv`)*.
 
-### 8.2 MST Runtime Scaling: Kruskal vs. Prim on Sparse and Dense Topologies
-We evaluated Kruskal and Prim across graph sizes from $|V| = 10$ to $|V| = 200$, comparing sparse ($d = 0.20$) and dense ($d = 0.80$) networks over 10 repeats:
+#### Table 2: Shortest Path Routing Runtime: SSSP & APSP (Mean ± Std over 10 Repeats)
+| Nodes $\|V\|$ | Dijkstra SSSP (ms) | Bellman-Ford (ms) | SSSP Speedup | Rep. Dijkstra Sparse (ms) | Floyd-Warshall Sparse (ms) | APSP Speedup |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 10 | $0.022 \pm 0.007$ | $0.018 \pm 0.003$ | BF 1.22x | $0.196 \pm 0.009$ | $0.112 \pm 0.007$ | FW 1.75x |
+| 25 / 35 | $0.114 \pm 0.011$ | $0.158 \pm 0.006$ | **Dijkstra 1.39x** | $1.813 \pm 0.025$ | $1.891 \pm 0.034$ | **Tied (~1.0x)** |
+| 50 / 60 | $0.188 \pm 0.006$ | $0.449 \pm 0.019$ | **Dijkstra 2.39x** | $14.276 \pm 0.099$ | $30.818 \pm 0.480$ | **RD 2.16x** |
+| 100 / 80 | $0.511 \pm 0.044$ | $1.518 \pm 0.090$ | **Dijkstra 2.97x** | $29.582 \pm 0.633$ | $77.847 \pm 2.445$ | **RD 2.63x** |
 
-```
-Table 1: MST Runtime Comparison (Mean ± Std over 10 Repeats on Fixed Topologies)
-+-------+--------+---------+--------------------+---------------------+
-|  |V|  |  |E|   | Density | Kruskal Mean (ms)  | Prim (Min-Heap) (ms)|
-+-------+--------+---------+--------------------+---------------------+
-|   10  |      9 |   0.20  |  0.015 ± 0.009 ms  |   0.026 ± 0.012 ms  |
-|   10  |     36 |   0.80  |  0.018 ± 0.002 ms  |   0.030 ± 0.002 ms  |
-|   25  |     60 |   0.20  |  0.040 ± 0.004 ms  |   0.083 ± 0.004 ms  |
-|   25  |    240 |   0.80  |  0.081 ± 0.008 ms  |   0.114 ± 0.013 ms  |
-|   50  |    245 |   0.20  |  0.110 ± 0.007 ms  |   0.218 ± 0.005 ms  |
-|   50  |    980 |   0.80  |  0.315 ± 0.029 ms  |   0.314 ± 0.005 ms  |  <-- Crossover
-|  100  |    990 |   0.20  |  0.426 ± 0.030 ms  |   0.569 ± 0.016 ms  |
-|  100  |  3,960 |   0.80  |  1.537 ± 0.137 ms  |   0.934 ± 0.034 ms  |  (Prim 1.6x faster)
-|  150  |  2,235 |   0.20  |  0.887 ± 0.052 ms  |   0.981 ± 0.012 ms  |
-|  150  |  8,940 |   0.80  |  3.453 ± 0.281 ms  |   1.824 ± 0.069 ms  |  (Prim 1.9x faster)
-|  200  |  3,980 |   0.20  |  2.432 ± 0.722 ms  |   2.055 ± 0.462 ms  |
-|  200  | 15,920 |   0.80  |  6.836 ± 0.903 ms  |   3.012 ± 0.147 ms  |  (Prim 2.3x faster)
-+-------+--------+---------+--------------------+---------------------+
-```
+*Finding*: Dijkstra with our custom `MinHeap` steadily widens its advantage over Bellman-Ford, reaching nearly $3\times$ speedup at $|V|=100$. For APSP, Repeated Dijkstra outperforms Floyd-Warshall for $|V| \ge 40$ on sparse graphs ($1.58\times$ to $2.63\times$ faster) and for $|V| \ge 60$ on dense graphs ($1.38\times$ to $1.51\times$). We hypothesize that Floyd-Warshall's triple loop performing $V^3$ nested dictionary lookups incurs high bytecode and hash-table overhead in CPython; note this is an unmeasured hypothesis regarding interpreter dynamics. *(Full data: `sssp_runtime_comparison.csv`, `apsp_runtime_comparison.csv`)*.
 
-**Empirical Finding**:
-- On **sparse graphs** ($d = 0.20$), Kruskal is $1.3\times$ to $2.1\times$ faster than Prim across all sizes up to $|V| = 200$.
-- On **dense graphs** ($d = 0.80$), a clear crossover occurs at $|V| = 50$: for $|V| \ge 100$, Prim with the indexed min-heap beats Kruskal ($0.934\,\text{ms}$ vs $1.537\,\text{ms}$ at $|V|=100$, and $3.012\,\text{ms}$ vs $6.836\,\text{ms}$ at $|V|=200$, a **$2.3\times$ advantage for Prim**). This matches asymptotic theory: Kruskal’s initial sorting step $\mathcal{O}(E \log E)$ dominates when $|E| \approx 16,000$.
+![Runtime vs Graph Size](../experiments/results/runtime_vs_size.png){width=3.6in}
+*Figure 1: Empirical execution time scaling vs network size $|V|$ across (top-left) MST sparse/dense, (top-right) SSSP Dijkstra vs Bellman-Ford, and (bottom) APSP sparse/dense.*
 
 ---
 
-### 8.3 SSSP Runtime & Speedup: Dijkstra vs. Bellman-Ford
-Single-source shortest path execution times from source node 0 on fixed topologies ($d = 0.20$):
+### 8.2 Placement Quality Across Server Capacity Multipliers (0.25x to 2.0x)
 
-```
-Table 2: SSSP Runtime Comparison (Mean ± Std over 10 Repeats on Fixed Topologies)
-+-------+-------+--------------------+-----------------------+---------------+
-|  |V|  |  |E|  | Dijkstra Mean (ms) | Bellman-Ford Mean (ms)| Speedup Ratio |
-+-------+-------+--------------------+-----------------------+---------------+
-|   10  |    9  |  0.023 ± 0.008 ms  |    0.018 ± 0.003 ms   |     0.78x     |
-|   20  |   38  |  0.052 ± 0.002 ms  |    0.062 ± 0.001 ms   |     1.19x     |
-|   35  |  119  |  0.111 ± 0.002 ms  |    0.155 ± 0.003 ms   |     1.40x     |
-|   50  |  245  |  0.192 ± 0.012 ms  |    0.445 ± 0.012 ms   |     2.32x     |
-|   75  |  555  |  0.332 ± 0.007 ms  |    0.860 ± 0.055 ms   |     2.59x     |
-|  100  |  990  |  0.508 ± 0.006 ms  |    1.522 ± 0.102 ms   |     3.00x     |
-+-------+-------+--------------------+-----------------------+---------------+
-```
+#### Table 3: Placement Strategy Comparison Across Capacity Multipliers (Mean ± Std over 10 Seeds)
+| Cap Mult | Lower Bound Objective | Knapsack DP Gap to LB (%) | Greedy Rounds Gap to LB (%) | Spill-Over Greedy Gap to LB (%) | Random Placement Gap to LB (%) | DP Unplaced Tasks | Fleet Utilization |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.25x | $557,414 \pm 88,608$ | $+32.52 \pm 12.76\%^*$ | $+33.39 \pm 12.31\%$ | $+34.37 \pm 13.08\%$ | $+47.27 \pm 10.55\%$ | $13.2 \pm 1.9$ | $73.4\% \pm 5.4\%$ |
+| 0.50x | $557,414 \pm 88,608$ | $+20.80 \pm 6.05\%$ | $+20.38 \pm 6.39\%$ | $+22.14 \pm 6.34\%$ | $+45.51 \pm 13.36\%$ | $0.1 \pm 0.3$ | $68.8\% \pm 4.3\%$ |
+| 1.00x | $557,414 \pm 88,608$ | **$+6.41 \pm 2.92\%$** | **$+6.37 \pm 2.95\%$** | $+7.18 \pm 3.12\%$ | $+43.08 \pm 11.27\%$ | $0.0$ | $34.4\% \pm 2.4\%$ |
+| 2.00x | $557,414 \pm 88,608$ | $+1.74 \pm 0.99\%$ | $+1.75 \pm 1.01\%$ | $+2.39 \pm 1.05\%$ | $+43.02 \pm 8.42\%$ | $0.0$ | $17.2\% \pm 1.2\%$ |
 
-**Empirical Finding**: Dijkstra with an indexed binary min-heap scales gracefully to $0.508\,\text{ms}$ at $|V| = 100$, achieving a **$3.00\times$ speedup** over Bellman-Ford. At very small sizes ($|V| = 10$), Bellman-Ford is slightly faster ($0.018\,\text{ms}$ vs $0.023\,\text{ms}$) due to lower initialization overhead.
+*\* At 0.25x capacity, an average of 13.2 tasks could not fit. The reported gap reflects the increase in placed client access latency relative to the lower bound ($25.27\,\text{ms}$ vs $19.24\,\text{ms}$). Full data: `placement_capacity_sensitivity.csv`.*
+
+*Empirical Findings*:
+1. **Knapsack DP and Greedy Rounds Are Statistically Indistinguishable**: Across all capacity levels, Knapsack DP and Greedy Rounds achieve virtually tied solution quality ($6.41\%$ vs $6.37\%$ at $1.0\times$; $1.74\%$ vs $1.75\%$ at $2.0\times$). In our multi-round bidding loop, each server receives 2–5 proposals per round, making greedy ratio choices closely mirror 0-1 knapsack selections.
+2. **Both Multi-Round Schedulers Outperform Spill-Over Greedy**: Coordinated regret-based bidding prevents high-traffic tasks from greedily occupying servers required by low-traffic tasks, beating Spill-Over Greedy ($7.18\%$ at $1.0\times$, $2.39\%$ at $2.0\times$).
+3. **Random Placement Shows No Adaptation**: Random placement incurs an optimality gap of $43\%$ to $47\%$ across all capacity levels. Expanding capacity does not improve random placement ($45.51\%$ at $0.5\times \rightarrow 43.02\%$ at $2.0\times$) because it ignores network topology and shortest paths.
 
 ---
 
-### 8.4 APSP Scaling: Floyd-Warshall vs. Repeated Dijkstra
-We evaluated all-pairs shortest path generation comparing Floyd-Warshall against Repeated Dijkstra across sparse ($d = 0.20$) and dense ($d = 0.80$) graphs:
+### 8.3 Workload Scaling & Lambda Sensitivity Trade-Offs
 
-```
-Table 3: APSP Runtime Comparison (Mean ± Std over 10 Repeats on Fixed Topologies)
-+-------+--------+---------+--------------------+------------------------+---------------+
-|  |V|  |  |E|   | Density | Floyd-Warshall(ms) | Repeated Dijkstra (ms) |  FW / RD Ratio|
-+-------+--------+---------+--------------------+------------------------+---------------+
-|   10  |      9 |   0.20  |  0.112 ± 0.007 ms  |    0.196 ± 0.009 ms    |     0.57x     |
-|   10  |     36 |   0.80  |  0.193 ± 0.003 ms  |    0.268 ± 0.004 ms    |     0.72x     |
-|   25  |     60 |   0.20  |  1.891 ± 0.034 ms  |    1.813 ± 0.025 ms    |     1.04x     |
-|   25  |    240 |   0.80  |  2.561 ± 0.017 ms  |    2.724 ± 0.181 ms    |     0.94x     |
-|   40  |    156 |   0.20  |  8.642 ± 0.105 ms  |    5.475 ± 0.419 ms    |     1.58x     |
-|   40  |    624 |   0.80  | 10.400 ± 0.311 ms  |    8.666 ± 0.170 ms    |     1.20x     |
-|   60  |    354 |   0.20  | 30.818 ± 0.480 ms  |   14.276 ± 0.099 ms    |     2.16x     |
-|   60  |  1,416 |   0.80  | 34.393 ± 0.488 ms  |   24.871 ± 0.264 ms    |     1.38x     |
-|   80  |    632 |   0.20  | 77.847 ± 2.445 ms  |   29.582 ± 0.633 ms    |     2.63x     |
-|   80  |  2,528 |   0.80  | 85.662 ± 2.274 ms  |   56.739 ± 4.216 ms    |     1.51x     |
-+-------+--------+---------+--------------------+------------------------+---------------+
-```
+#### Table 4: Workload Task Scaling Benchmark (Mean ± Std over 10 Seeds on $|V|=30$)
+| Task Count | Knapsack DP Gap (%) | Greedy Rounds Gap (%) | Spill-Over Greedy Gap (%) | Random Placement Gap (%) | Fleet Utilization |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 15 Tasks | $+0.34 \pm 0.78\%$ | $+0.34 \pm 0.78\%$ | $+0.51 \pm 0.79\%$ | $+50.16 \pm 8.92\%$ | $14.8\% \pm 1.1\%$ |
+| 35 Tasks | $+0.82 \pm 1.09\%$ | $+0.84 \pm 1.07\%$ | $+1.09 \pm 1.25\%$ | $+49.50 \pm 8.76\%$ | $34.4\% \pm 2.4\%$ |
+| 75 Tasks | $+3.54 \pm 2.92\%$ | $+3.61 \pm 2.87\%$ | $+4.20 \pm 3.10\%$ | $+47.37 \pm 7.42\%$ | $73.8\% \pm 4.9\%$ |
 
-**Empirical Finding**:
-- On **sparse graphs**, Repeated Dijkstra is **$2.63\times$ faster** than Floyd-Warshall at $|V| = 80$ ($29.58\,\text{ms}$ vs $77.85\,\text{ms}$).
-- On **dense graphs**, the ratio narrows to **$1.51\times$** ($56.74\,\text{ms}$ vs $85.66\,\text{ms}$).
-- *Implementation Insight*: While theoretical complexity suggests Floyd-Warshall $\mathcal{O}(V^3)$ should beat Repeated Dijkstra $\mathcal{O}(V^3 \log V)$ on dense graphs, Repeated Dijkstra remains faster in CPython at $|V| = 80$. This is because Python's `heapq` is implemented in optimized C, whereas Floyd-Warshall executes three nested pure-Python loops ($V^3 = 512,000$ iterations) with interpreter bytecode dispatch overhead. At $|V| = 10$, Floyd-Warshall is faster ($0.112\,\text{ms}$ vs $0.196\,\text{ms}$) due to zero heap allocation overhead.
+*(Full data: `placement_tasks_sensitivity.csv`)*.
 
-![Runtime vs Graph Size](../experiments/results/runtime_vs_size.png)
-*Figure 1: Empirical execution time scaling vs network size $|V|$ with error bars across (top-left) MST sparse and dense networks, (top-right) SSSP Dijkstra vs Bellman-Ford, (bottom-left) APSP sparse networks, and (bottom-right) APSP dense networks.*
+#### Table 5: Lambda Sensitivity Benchmark (Mean ± Std over 10 Seeds across $\lambda \in [0, 200]$)
+| Lambda $\lambda$ | Client Access Latency (ms) | MST Replication Sync Cost | Total Composite Objective | Knapsack DP Gap to LB (%) | Random Placement Gap (%) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.0 | $18.23 \pm 1.84\,\text{ms}$ | $111.2 \pm 89.3$ | $531,652 \pm 52,542$ | $+0.60 \pm 0.88\%$ | $+48.19 \pm 7.69\%$ |
+| 1.0 | $18.24 \pm 1.85\,\text{ms}$ | $98.8 \pm 82.0$ | $535,386 \pm 53,207$ | $+0.64 \pm 0.91\%$ | $+49.55 \pm 8.01\%$ |
+| 10.0 | $18.49 \pm 1.96\,\text{ms}$ | $57.6 \pm 53.4$ | $559,462 \pm 61,089$ | $+1.33 \pm 1.32\%$ | $+64.27 \pm 10.34\%$ |
+| 25.0 | $18.94 \pm 2.12\,\text{ms}$ | $32.2 \pm 19.4$ | $580,528 \pm 70,583$ | $+3.18 \pm 2.70\%$ | $+93.84 \pm 12.25\%$ |
+| 50.0 | $19.14 \pm 2.24\,\text{ms}$ | $26.8 \pm 16.9$ | $604,772 \pm 81,146$ | $+6.75 \pm 4.90\%$ | $+146.12 \pm 14.88\%$ |
+| 200.0 | $19.45 \pm 2.53\,\text{ms}$ | $23.8 \pm 15.9$ | $733,809 \pm 150,274$ | $+29.08 \pm 18.45\%$ | $+465.69 \pm 52.38\%$ |
 
----
+*(Full data: `placement_lambda_sensitivity.csv`)*.
 
-### 8.5 Placement Solution Quality Across Capacity Constraints (0.25x to 2.0x)
-We evaluated all five strategies over **10 random seeds** across capacity multipliers from $0.25\times$ to $2.00\times$ on $|V| = 30$ with 35 tasks:
+![Placement Sensitivity Combined](../experiments/results/placement_sensitivity_combined.png){width=3.8in}
+*Figure 2: Empirical placement sensitivity suite: (A) Access latency vs capacity, (B) Optimality gap vs capacity, (C) Objective cost vs tasks, and (D) Access latency vs MST replication sync cost across $\lambda \in [0, 200]$.*
 
-```
-Table 4: Placement Strategy Comparison Across Capacity Constraints (Mean ± Std over 10 Seeds)
-+-------+--------------------+--------------------+---------------+-----------------+------------------+-----------------+---------------+---------------+
-| Cap   | Unconstrained LB   | Knapsack DP        | Knapsack DP   | Greedy Rounds   | Spillover Greedy | Random          | DP Unplaced   | Fleet Capacity|
-| Mult  | Objective Mean     | Objective Mean     | Gap to LB (%) | Gap to LB (%)   | Gap to LB (%)    | Gap to LB (%)   | Tasks Count   | Utilization % |
-+-------+--------------------+--------------------+---------------+-----------------+------------------+-----------------+---------------+---------------+
-| 0.25x | 557,414 ± 88,608   | 458,884 ± 77,621*  | +32.52±12.76%*| +33.39 ± 12.31% | +34.37 ± 13.08%  | +47.27 ± 10.55% | 13.2 ± 1.9    | 73.4% ± 5.4%  |
-| 0.50x | 557,414 ± 88,608   | 670,709 ± 90,428   | +20.80 ± 6.05%| +20.38 ± 6.39%  | +22.14 ± 6.34%   | +45.51 ± 13.36% |  0.1 ± 0.3    | 68.8% ± 4.3%  |
-| 0.75x | 557,414 ± 88,608   | 615,351 ± 93,133   | +10.56 ± 4.00%| +10.64 ± 3.87%  | +11.28 ± 4.10%   | +45.17 ± 8.96%  |  0.0          | 45.9% ± 3.3%  |
-| 1.00x | 557,414 ± 88,608   | 592,835 ± 93,878   |  +6.41 ± 2.92%|  +6.37 ± 2.95%  |  +7.18 ± 3.12%   | +43.08 ± 11.27% |  0.0          | 34.4% ± 2.4%  |
-| 1.25x | 557,414 ± 88,608   | 582,084 ± 92,234   |  +4.45 ± 2.04%|  +4.31 ± 1.95%  |  +5.09 ± 2.38%   | +45.33 ± 11.40% |  0.0          | 27.5% ± 1.9%  |
-| 1.50x | 557,414 ± 88,608   | 576,129 ± 91,964   |  +3.36 ± 1.72%|  +3.49 ± 1.84%  |  +3.90 ± 1.86%   | +42.91 ± 7.35%  |  0.0          | 22.9% ± 1.6%  |
-| 2.00x | 557,414 ± 88,608   | 567,183 ± 90,790   |  +1.74 ± 0.99%|  +1.75 ± 1.01%  |  +2.39 ± 1.05%   | +43.02 ± 8.42%  |  0.0          | 17.2% ± 1.2%  |
-+-------+--------------------+--------------------+---------------+-----------------+------------------+-----------------+---------------+---------------+
-```
-*\* Note on 0.25x: The total raw objective sum is smaller because 13.2 tasks could not fit in the fleet. To provide an honest metric, the gap reported for 0.25x represents the percentage increase in average client access latency across placed tasks relative to the lower bound ($25.27\,\text{ms}$ vs $19.24\,\text{ms}$).*
+*Empirical Trade-off Findings*:
+- At $\lambda = 1.0$: Access latency is $18.24\,\text{ms}$ ($+0.05\%$ vs $\lambda=0$), while MST sync cost drops from $111.2$ to $98.8$ (**$-11.2\%$ reduction**).
+- At $\lambda = 10.0$: Sync cost decreases to $57.6$ (**$-48.2\%$ reduction**), with client access latency rising to $18.49\,\text{ms}$ (**$+1.4\%$ increase**).
+- At $\lambda = 25.0$: Sync cost reaches $32.2$ (**$-71.0\%$ reduction**), with access latency rising to $18.94\,\text{ms}$ (**$+3.9\%$ increase**).
+- At $\lambda \ge 50.0$: Sync cost plateaus from $26.8$ to $23.8$ (maximum **$-78.6\%$ reduction**), while client access latency levels off at $19.45\,\text{ms}$ (**$+6.7\%$ overall increase**).
+- Lower bound gap rises ($+0.60\%$ at $\lambda=0 \rightarrow +29.08\%$ at $\lambda=200$) because capacity bottlenecks prevent all tasks from clustering at or near the central sync hub.
 
-![Latency vs Server Capacity](../experiments/results/latency_vs_capacity.png)
-*Figure 2: (Left) Average client access latency across all 5 strategies vs server capacity multiplier. (Right) Access latency gap to the unconstrained lower bound (%) with error bars.*
-
-**Empirical Findings**:
-1. **Knapsack DP and Greedy Rounds Perform Almost Identically**:
-   Across all capacity levels, Iterative Knapsack DP and Iterative Greedy Rounds yield virtually indistinguishable solution quality ($6.41\% \pm 2.92\%$ vs $6.37\% \pm 2.95\%$ at $1.0\times$; $1.74\% \pm 0.99\%$ vs $1.75\% \pm 1.01\%$ at $2.0\times$). In our multi-round bidding process, each server receives a modest set of candidate proposals per round (2–5 tasks), meaning the greedy efficiency ratio order closely matches the 0-1 knapsack branch choices.
-2. **Both Multi-Round Bidding Strategies Beat Spill-Over Greedy**:
-   Spill-over Greedy places high-traffic tasks first, but because it lacks cross-server regret coordination, it produces higher gaps ($7.18\% \pm 3.12\%$ at $1.0\times$, $2.39\% \pm 1.05\%$ at $2.0\times$).
-3. **Random Placement Shows No Adaptation**:
-   Random placement incurs an optimality gap of **$43\%$ to $47\%$** across all capacity levels. Expanding capacity does not improve random placement ($45.51\%$ at $0.5\times \rightarrow 43.02\%$ at $2.0\times$) because random placement does not consider proximity or shortest-path routing.
-4. **Smooth Reduction with Capacity**:
-   As capacity increases from $0.5\times$ to $2.0\times$, the optimality gap to the unconstrained lower bound decreases smoothly from **$20.80\%$ to $1.74\%$**.
-5. **Handling Saturated Fleets ($0.25\times$)**:
-   When fleet capacity is overwhelmed (demanded resources equal $139.2\%$ of fleet capacity), Knapsack DP places as many tasks as can fit (utilization $73.4\%$) and isolates the remaining **$13.2 \pm 1.9$ unplaced tasks**. Placed tasks experience an average access latency of $25.27 \pm 3.13\,\text{ms}$ (+32.5% above the lower bound), whereas random placement degrades to $28.13 \pm 3.54\,\text{ms}$ (+47.3%).
-
----
-
-### 8.6 Workload Scaling Sensitivity
-We varied workload size from 15 to 75 tasks on $|V| = 30$ with standard capacity over 10 seeds:
-
-```
-Table 5: Workload Size Scaling Sensitivity (Mean ± Std over 10 Seeds)
-+-------+-------------------+-------------------+---------------+---------------+---------------+---------------+
-| Tasks | Lower Bound Obj   | Knapsack DP Obj   | DP Gap (%)    | Greedy Gap (%)| Spill Gap (%) | Rand Gap (%)  |
-+-------+-------------------+-------------------+---------------+---------------+---------------+---------------+
-|   15  | 222,964 ± 30,582  | 223,667 ± 30,176  | +0.34 ± 0.78% | +0.34 ± 0.78% | +0.51 ± 0.93% | +50.16±15.89% |
-|   25  | 373,363 ± 46,335  | 375,174 ± 45,673  | +0.51 ± 0.75% | +0.53 ± 0.76% | +0.67 ± 0.83% | +49.53±11.78% |
-|   35  | 520,373 ± 69,139  | 524,407 ± 68,113  | +0.82 ± 1.09% | +0.84 ± 1.15% | +1.09 ± 1.27% | +49.50±11.32% |
-|   50  | 738,725 ± 100,530 | 751,318 ± 96,209  | +1.82 ± 1.76% | +1.79 ± 1.71% | +2.40 ± 2.09% | +47.64 ± 9.82%|
-|   75  |1,113,646 ± 141,398|1,150,508 ± 126,983| +3.54 ± 2.92% | +3.61 ± 2.99% | +4.20 ± 2.97% | +47.37 ± 8.72%|
-+-------+-------------------+-------------------+---------------+---------------+---------------+---------------+
-```
-
-![Placement Sensitivity Tasks](../experiments/results/placement_sensitivity_tasks.png)
-*Figure 3: (Left) Total composite objective cost vs number of cloud tasks. (Right) Optimality gap relative to the unconstrained lower bound (%) with error bars.*
-
-**Empirical Finding**: As task count increases from 15 to 75, server contention increases, and the optimality gap to the unconstrained lower bound rises from $0.34\% \pm 0.78\%$ to $3.54\% \pm 2.92\%$. Across all workload sizes, Knapsack DP and Greedy Rounds remain closely matched and outperform Spill-over Greedy.
-
----
-
-### 8.7 Lambda Sensitivity: Client Latency vs. MST Backbone Sync Trade-off
-We evaluated the penalty parameter $\lambda \in [0.0, 2.0]$ across 10 random seeds on $|V| = 30$ with 35 tasks:
-
-```
-Table 6: Lambda Sensitivity Benchmark (Mean ± Std over 10 Seeds)
-+--------+-------------------+------------------+-------------------+---------------+---------------+
-| Lambda | Access Lat (ms)   | MST Sync Cost    | Total Objective   | DP Gap (%)    | Random Gap (%)|
-+--------+-------------------+------------------+-------------------+---------------+---------------+
-|  0.0   | 18.23 ± 1.85 ms   | 111.2 ± 89.3     | 531,652 ± 52,542  | +0.60 ± 0.88% | +48.19 ± 7.69%|
-|  0.5   | 18.23 ± 1.84 ms   | 103.5 ± 84.2     | 533,559 ± 52,799  | +0.62 ± 0.91% | +48.86 ± 7.85%|
-|  1.0   | 18.24 ± 1.85 ms   |  98.8 ± 82.0     | 535,386 ± 53,207  | +0.64 ± 0.91% | +49.55 ± 8.01%|
-|  2.0   | 18.25 ± 1.85 ms   |  91.3 ± 78.5     | 538,518 ± 53,627  | +0.65 ± 0.92% | +51.00 ± 8.31%|
-+--------+-------------------+------------------+-------------------+---------------+---------------+
-```
-
-![Placement Sensitivity Lambda](../experiments/results/placement_sensitivity_lambda.png)
-*Figure 4: (Left) Access latency vs MST replication synchronization cost as penalty weight $\lambda$ varies. (Right) Optimality gap to unconstrained lower bound vs $\lambda$.*
-
-**Empirical Finding (Key Trade-off)**:
-As $\lambda$ increases from 0.0 to 2.0:
-- Client access latency remains nearly unchanged, rising slightly from $18.23\,\text{ms}$ to $18.25\,\text{ms}$ (**$+0.1\%$ difference**).
-- Meanwhile, replication synchronization cost along the MST backbone decreases from $111.2$ down to $91.3$ (**$-17.9\%$ reduction**).
-This shows that tasks can be moved closer to the traffic-weighted median sync hub along the MST backbone, achieving substantial state replication savings with negligible degradation in client access latency.
-
----
-
-### 8.8 Visual Topology and Backbone Overlay
-Figure 5 shows the rendered physical network layout for the 10-node small topology, showing server capacities, underlying physical mesh links, the MST communication backbone, and the traffic-weighted median **Sync Hub** (Server 0):
-
-![Cloud Network Topology and MST Backbone Overlay](../experiments/results/mst_backbone_topology.png)
-*Figure 5: Visual cloud network layout showing server nodes (circle size proportional to compute capacity), underlying physical links (dashed grey), MST communication backbone links (bold blue with latency tags), and the designated traffic-weighted median Sync Hub (Server 0, marked with a star).*
+![Cloud Network Topology and MST Backbone Overlay](../experiments/results/mst_backbone_topology.png){width=2.8in}
+*Figure 3: Physical network layout for the 10-node topology showing server capacities (node sizes), physical mesh links (dashed grey), MST backbone links (bold blue with latency tags), and the traffic-weighted median Sync Hub (Server 0, star).*
 
 ---
 
 ## 9. Limitations of the Approach
 
-To provide an honest engineering assessment, we identify three primary limitations in our model:
-
-1. **Heuristic Nature of Multi-Server Coordination**:
-   Multi-server task placement under mutual capacity limits is a variant of the **Generalized Assignment Problem (GAP)** and vector bin packing, which is NP-hard in the strong sense. While our model solves each individual server's local knapsack subproblem optimally via 0-1 Knapsack DP, decomposing the global problem into iterative bidding rounds is a heuristic. It does not provide a formal polynomial-time approximation guarantee against the global joint optimum. On tiny instances ($\le 7$ tasks, $\le 6$ servers), our brute-force assignment solver confirms an optimality gap $\le 5\%$, but larger fleet interactions may occasionally settle on locally optimal configurations.
-2. **Single-Resource Capacity Dimension**:
-   Our current formulation models server capacity $C_v$ and task demand $d_j$ as scalar integers (e.g. CPU core or RAM slots). Production cloud datacenters require multi-dimensional vector bin packing that simultaneously constraints CPU, RAM, GPU memory, storage I/O, and egress network bandwidth. A candidate placement might satisfy CPU limits while violating memory or I/O bounds.
-3. **Synthetic Network Topologies and Workloads**:
-   Our experimental testbeds rely on synthetic graphs generated via connected random spanning trees with added link density and uniform/normal request rates. While these topologies reflect varying sizes and densities, they do not capture complex production datacenter characteristics such as hierarchical Clos/Fat-Tree fabrics, diurnal traffic spikes, or transient router queueing delays.
+1. **Heuristic Nature of Multi-Server Coordination**: Multi-server placement under mutual capacity limits is a variant of the **Generalized Assignment Problem (GAP)**, which is strongly NP-hard. While our model solves each individual server's local knapsack subproblem optimally via 0-1 Knapsack DP, decomposing the global problem into iterative bidding rounds is a heuristic without a polynomial-time approximation guarantee. On 60 random tiny instances (5 servers, 6 tasks) evaluated against the exact brute-force optimum, iterative knapsack DP achieved a **mean optimality gap of $4.39\%$** and a **median gap of $0.00\%$**, with a **maximum gap of $36.75\%$**. A share of **18 out of 60 instances ($30.0\%$)** exceeded a $5\%$ gap due to early round capacity commitments locking out better global combinations. *(Full log: `brute_force_optimality_gap.csv`)*.
+2. **Single-Resource Capacity Dimension**: Server capacity $C_v$ and task demand $d_j$ are scalar integers. Production datacenters require multi-dimensional vector packing across CPU, RAM, GPU memory, storage I/O, and network bandwidth.
+3. **Synthetic Network Topologies**: Experimental testbeds rely on synthetic connected random spanning trees with added link density rather than production Clos/Fat-Tree fabrics with diurnal traffic dynamics.
 
 ---
 
 ## 10. Algorithmic Trade-offs & Discussion
 
-Our empirical findings clarify key practical trade-offs:
-
 ### 10.1 Kruskal vs. Prim for Backbone Synthesis
-- **Sparse Networks ($d \le 0.20$)**: Kruskal's algorithm is faster ($0.110\,\text{ms}$ vs $0.218\,\text{ms}$ at $|V| = 50$) because sorting $|E| \approx 250$ edges has low constant-factor overhead.
-- **Dense Networks ($d \ge 0.80$)**: Prim with an indexed min-heap is faster for $|V| \ge 100$ ($0.934\,\text{ms}$ vs $1.537\,\text{ms}$ at $|V| = 100$; $3.012\,\text{ms}$ vs $6.836\,\text{ms}$ at $|V| = 200$), as Kruskal's edge-sorting step $\mathcal{O}(E \log E)$ becomes a bottleneck on dense graphs.
+- **Sparse Networks ($d \le 0.20$)**: Kruskal's algorithm is faster than Prim up to $|V| \approx 150$ ($0.110\,\text{ms}$ vs $0.218\,\text{ms}$ at $|V| = 50$; $0.887\,\text{ms}$ vs $0.981\,\text{ms}$ at $|V| = 150$) because sorting $|E| \le 2,235$ edges exhibits low constant-factor overhead. At $|V| = 200$ sparse, Prim ($2.06 \pm 0.46\,\text{ms}$) was slightly faster than Kruskal ($2.43 \pm 0.72\,\text{ms}$) with overlapping std.
+- **Dense Networks ($d \ge 0.80$)**: Prim with a min-heap is faster for $|V| \ge 100$ ($0.93\,\text{ms}$ vs $1.54\,\text{ms}$ at $|V| = 100$; $3.01\,\text{ms}$ vs $6.84\,\text{ms}$ at $|V| = 200$, a **$2.3\times$ speedup**), as Kruskal's $\mathcal{O}(E \log E)$ edge-sorting dominates when $|E| \approx 16,000$.
 
 ### 10.2 Floyd-Warshall vs. Repeated Dijkstra for Routing Matrices
-- **Sparse Topologies**: Repeated Dijkstra with an indexed min-heap runs in $\mathcal{O}(V(V+E) \log V)$ and is **$2.63\times$ faster** than Floyd-Warshall at $|V| = 80$ ($29.58\,\text{ms}$ vs $77.85\,\text{ms}$).
-- **Dense Topologies**: The ratio narrows to $1.51\times$. In pure CPython, Repeated Dijkstra remains faster even at density 0.8 due to Python's C-compiled `heapq` module versus Floyd-Warshall's pure-Python triple-nested loop interpreter overhead. At small sizes ($|V| = 10$), Floyd-Warshall is faster ($0.112\,\text{ms}$ vs $0.196\,\text{ms}$) due to zero heap instantiation overhead.
+- **Sparse Topologies**: Repeated Dijkstra with our pure-Python `MinHeap` runs in $\mathcal{O}(V(V+E) \log V)$ and is **$2.63\times$ faster** than Floyd-Warshall at $|V| = 80$ ($29.58\,\text{ms}$ vs $77.85\,\text{ms}$).
+- **Dense Topologies**: The ratio narrows to $1.51\times$ at $|V| = 80$ ($56.74\,\text{ms}$ vs $85.66\,\text{ms}$). Even on dense graphs where Floyd-Warshall is asymptotically $\mathcal{O}(V^3)$ vs Repeated Dijkstra $\mathcal{O}(V^3 \log V)$, Repeated Dijkstra remains faster in CPython. Both implementations are written from scratch in pure Python. We hypothesize that Floyd-Warshall's triple loop performing $V^3 = 512,000$ iterations over nested dictionary lookups (`dist[i][k] + dist[k][j]`) incurs substantial constant-factor bytecode dispatch and hash-table overhead in CPython; note that this is an unmeasured hypothesis regarding interpreter dynamics. At small sizes ($|V| = 10$), Floyd-Warshall is faster ($0.112\,\text{ms}$ vs $0.196\,\text{ms}$) due to zero heap allocation overhead.
 
 ### 10.3 0-1 Knapsack DP vs. Greedy Rounds
-- On small per-round proposal sets, Iterative Knapsack DP and Iterative Greedy Rounds yield nearly identical solution quality ($6.41\%$ vs $6.37\%$ at $1.0\times$ capacity). However, DP provides exact discrete optimality guarantees, whereas Greedy heuristics can leave larger capacity gaps on irregular item sizes.
-- Both multi-round bidding models outperform simple Spill-Over Greedy ($7.18\%$) by coordinating bids via regret.
+Across all experimental sweeps, Iterative Knapsack DP and Iterative Greedy Rounds are statistically indistinguishable ($6.41\% \pm 2.92\%$ vs $6.37\% \pm 2.95\%$ at $1.0\times$ capacity; $1.74\% \pm 0.99\%$ vs $1.75\% \pm 1.01\%$ at $2.0\times$). In our multi-round architecture, 0-1 Knapsack DP is exact only per server per round on the local regret benefit, not globally across the entire fleet assignment. Because each server receives small sets of competing proposals per round (typically 2–5 tasks), sorting by greedy regret-to-demand ratio yields essentially identical assignment decisions as exact local 0-1 knapsack branches. Both multi-round bidding models outperform uncoordinated Spill-Over Greedy ($7.18\% \pm 3.12\%$) by using cross-server opportunity regret to coordinate which tasks claim congested servers.
 
 ---
 
 ## 11. Engineering Policy Recommendations
 
-Based on our empirical results, we outline four deployment recommendations for cloud infrastructure teams:
-
-1. **Use Repeated Dijkstra for Precomputing Routing Tables**:
-   For networks with $|V| \ge 25$, precompute all-pairs shortest paths using Repeated Dijkstra with an indexed min-heap rather than Floyd-Warshall, achieving a **$1.5\times$ to $2.6\times$ speedup** on routing matrix generation.
-2. **Deploy an MST-Derived Replication Hub**:
-   Designate the traffic-weighted median server of the MST backbone as the central synchronization hub. Tuning $\lambda \approx 1.0$ reduces state replication latency along the backbone by **$11\%$ to $18\%$** while incurring only **$\le 0.1\%$** access latency degradation.
-3. **Use Regret-Based Proposal Scheduling**:
-   Multi-round regret bidding consistently beats simple spill-over scheduling by ensuring tasks facing high displacement penalties secure appropriate hosts first.
-4. **Capacity Planning**:
-   Fleet capacity multipliers should target at least $0.75\times$ to $1.0\times$ of total workload demand. Dropping below $0.5\times$ causes client latency gaps to widen past $20\%$ and leaves tasks unplaced when the fleet reaches saturation.
+1. **Precomputing Routing Tables via Repeated Dijkstra**: At small sizes ($|V| \le 10$), Floyd-Warshall is faster ($0.57\times$ to $0.72\times$ runtime of RD), with parity at $|V| = 25$ ($\sim 1.0\times$). Repeated Dijkstra with custom `MinHeap` is superior for **$|V| \ge 40$ on sparse graphs** ($1.58\times$ at $|V|=40 \rightarrow 2.63\times$ at $|V|=80$) and **$|V| \ge 60$ on dense graphs** ($1.38\times$ at $|V|=60 \rightarrow 1.51\times$ at $|V|=80$). We recommend Repeated Dijkstra for medium and large datacenter networks.
+2. **Deploy an MST-Derived Replication Hub with Balanced $\lambda$**: Designate the traffic-weighted median server along the MST backbone as the central sync hub. Operators can tune the empirical trade-off: $\lambda = 1.0$ yields **$11.2\%$ sync reduction** ($111.2 \rightarrow 98.8$) with $+0.05\%$ access latency ($18.23 \rightarrow 18.24\,\text{ms}$); $\lambda = 10.0$ yields **$48.2\%$ sync reduction** ($57.6$) with $+1.4\%$ latency ($18.49\,\text{ms}$); $\lambda = 25.0$ yields **$71.0\%$ sync reduction** ($32.2$) with $+3.9\%$ latency ($18.94\,\text{ms}$), plateauing toward the $-78.6\%$ limit ($23.8$ at $\lambda=200$).
+3. **Use Regret-Based Proposal Scheduling**: Multi-round regret bidding consistently beats simple spill-over scheduling by ensuring tasks facing high displacement penalties secure appropriate hosts first.
+4. **Capacity Provisioning & Fleet Sizing**: The multiplier scales raw server capacities. Baseline sizing ($1.0\times$) yields **$34.4\% \pm 2.4\%$** fleet utilization. Scaling to $0.50\times$ raises utilization to $68.8\%$ with $+20.80\%$ latency gap; $0.25\times$ causes saturation with $13.2$ dropped tasks. Fleets should be provisioned at $\ge 1.0\times$ to maintain gaps below $6.5\%$ and zero drops.
 
 ---
 
 ## 12. Conclusion & Future Work
 
-In this project, our group designed, implemented, and empirically evaluated a **Cloud Task Placement Suite** from scratch in Python. By uniting Greedy Minimum Spanning Trees, Shortest Path routing algorithms, and 0-1 Knapsack Dynamic Programming:
-- We addressed early model limitations by introducing **iterative multi-round regret bidding**, multi-server candidate selection, and MST synchronization hub optimization.
-- We demonstrated that structured task placement cuts client access latency by **~35% to 50%** relative to random assignment and stays within **$1.7\%$ to $6.4\%$** of the theoretical unconstrained lower bound under standard capacity.
-- We validated our algorithms through automated unit tests against NetworkX, brute-force checks, and 10-seed empirical evaluations logging mean and standard deviation.
-- We delivered an interactive Jupyter Notebook dashboard that executes top-to-bottom with full inline visual outputs.
-
-### Future Work
-- **Multi-Resource Vector Bin Packing**: Extending server capacities to joint vectors $\vec{C}_v = \langle \text{CPU}, \text{RAM}, \text{GPU}, \text{IOPS} \rangle$.
-- **Dynamic Online Scheduling**: Incorporating online task arrival and departure models with competitive ratio bounds.
-- **Resilient Routing Planes**: Integrating $k$-shortest paths (Yen's algorithm) to precompute instant failover paths during physical link cuts.
+We designed, implemented, and evaluated a from-scratch Python **Cloud Task Placement Suite** uniting Greedy MSTs, Shortest Paths, and 0-1 Knapsack DP:
+- **Iterative Regret Coordination**: Replaced single-server greedy placement with iterative multi-round regret bidding and MST sync hub optimization.
+- **Latency Improvements**: Placement achieves **$23.3\%$ to $28.1\%$ latency reduction** vs random placement at capacity $\ge 0.75\times$. While random placement is **$41\%$ to $46\%$ above the lower bound**, iterative knapsack DP stays within **$1.7\%$ to $6.4\%$** of the theoretical lower bound for capacity $\ge 1.0\times$.
+- **Validation & Delivery**: Full test suite passing against NetworkX and exact brute-force benchmarks, plus an interactive self-contained Jupyter notebook dashboard.
+- **Future Directions**: Multi-resource vector bin packing ($\langle \text{CPU}, \text{RAM}, \text{GPU} \rangle$), dynamic online task arrivals, and resilient failover routing planes via Yen's $k$-shortest paths.
 
 ---
 
 ## 13. References
 
-1. **Cormen, T. H., Leiserson, C. E., Rivest, R. L., & Stein, C.** (2022). *Introduction to Algorithms* (4th ed.). MIT Press.  
-   *(Chapter 14: Dynamic Programming; Chapter 20: Elementary Graph Algorithms; Chapter 21: Minimum Spanning Trees; Chapter 22: Single-Source Shortest Paths; Chapter 23: All-Pairs Shortest Paths; Chapter 34: NP-Completeness).*
-2. **Kleinberg, J., & Tardos, É.** (2006). *Algorithm Design*. Pearson / Addison-Wesley.  
-   *(Chapter 4: Greedy Algorithms; Chapter 6: Dynamic Programming).*
+1. **Cormen, T. H., Leiserson, C. E., Rivest, R. L., & Stein, C.** (2022). *Introduction to Algorithms* (4th ed.). MIT Press (Chapters 14, 20–23, 34).
+2. **Kleinberg, J., & Tardos, É.** (2006). *Algorithm Design*. Pearson / Addison-Wesley (Chapters 4, 6).
 3. **Dijkstra, E. W.** (1959). A note on two problems in connexion with graphs. *Numerische Mathematik*, 1(1), 269–271.
 4. **Kruskal, J. B.** (1956). On the shortest spanning subtree of a graph and the traveling salesman problem. *Proceedings of the American Mathematical Society*, 7(1), 48–50.
 5. **Prim, R. C.** (1957). Shortest connection networks and some generalizations. *Bell System Technical Journal*, 36(6), 1389–1401.
@@ -596,6 +291,6 @@ In this project, our group designed, implemented, and empirically evaluated a **
 7. **Bellman, R.** (1958). On a routing problem. *Quarterly of Applied Mathematics*, 16(1), 87–90.
 8. **Garey, M. R., & Johnson, D. S.** (1979). *Computers and Intractability: A Guide to the Theory of NP-Completeness*. W. H. Freeman.
 9. **Meng, X., Pappas, V., & Zhang, L.** (2010). Improving the scalability of data center networks with traffic-aware virtual machine placement. In *Proceedings of IEEE INFOCOM 2010* (pp. 1–9). `[verify]`
-10. **Karve, A., Kimbrel, T., Pacifici, G., Spreitzer, M., Steinder, M., Sviridenko, M., & Tantawi, A.** (2006). Dynamic placement of virtual machines for managing SLA violations. In *Proceedings of the 3rd International Conference on Autonomic Computing (ICAC)*. `[verify]`
+10. **Karve, A., Kimbrel, T., Pacifici, G., Spreitzer, M., Steinder, M., Sviridenko, M., & Tantawi, A.** (2006). Dynamic placement for clustered web applications. In *Proceedings of the 15th International Conference on World Wide Web* (WWW '06), pp. 595–604. `[verify]`
 11. **Shmoys, D. B., Tardos, É., & Aardal, K.** (1997). Approximation algorithms for facility location problems. In *Proceedings of the 29th Annual ACM Symposium on Theory of Computing (STOC '97)* (pp. 265–274). `[verify]`
 12. **Korte, B., & Vygen, J.** (2018). *Combinatorial Optimization: Theory and Algorithms* (6th ed.). Springer. *(Chapter 22: Facility Location)*. `[verify]`
