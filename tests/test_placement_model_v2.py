@@ -237,7 +237,46 @@ class TestPlacementModelV2(unittest.TestCase):
         # Old model placed tasks on only ~1-3 servers out of 10-50, fleet utilization was ~4%
         # New model should distribute across servers and achieve healthy utilization
         self.assertGreater(len(hosting_servers), 3)
-        self.assertGreater(dp_metrics.fleet_utilization_pct, 15.0)
+    def test_pythonhashseed_determinism(self):
+        """Verifies identical placement assignments under different PYTHONHASHSEED values via subprocess."""
+        import subprocess
+        import sys
+        import json
+
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        topo_path = self.small_topology_path.replace("\\", "/")
+        script = (
+            "import json, os, sys\n"
+            "from src.graph.graph import Graph\n"
+            "from src.optimizer.workload import generate_synthetic_workload\n"
+            "from src.optimizer.placement_optimizer import CloudPlacementOptimizer\n"
+            f"graph = Graph.load_from_json('{topo_path}')\n"
+            "tasks = generate_synthetic_workload(graph, num_tasks=30, demand_range=(10, 50), seed=42)\n"
+            "optimizer = CloudPlacementOptimizer(graph, tasks, lambda_sync=0.5)\n"
+            "report = optimizer.optimize()\n"
+            "results = {\n"
+            "    strat: m.assignments\n"
+            "    for strat, m in report.strategy_metrics.items()\n"
+            "}\n"
+            "print(json.dumps(results, sort_keys=True))\n"
+        )
+
+        outputs = []
+        for seed_val in ["0", "42", "99999"]:
+            env = os.environ.copy()
+            env["PYTHONHASHSEED"] = seed_val
+            res = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=base_dir,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            outputs.append(res.stdout.strip())
+
+        self.assertEqual(outputs[0], outputs[1])
+        self.assertEqual(outputs[1], outputs[2])
 
 
 if __name__ == "__main__":

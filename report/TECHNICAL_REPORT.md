@@ -157,22 +157,22 @@ All experimental benchmarks were conducted on Python 3.14 (Windows 11, [FILL IN:
 ### 8.1 Algorithmic Runtime Benchmarks (MST, SSSP, APSP)
 
 #### Table 1: MST Runtime Scaling (Mean ± Std over 10 Repeats)
-| Nodes $\|V\|$ | Sparse $\|E\|$ | Kruskal Sparse (ms) | Prim Sparse (ms) | Dense $\|E\|$ | Kruskal Dense (ms) | Prim Dense (ms) | Dense Speedup |
+| Nodes $|V|$ | Sparse $|E|$ | Kruskal Sparse (ms) | Prim Sparse (ms) | Dense $|E|$ | Kruskal Dense (ms) | Prim Dense (ms) | Dense Speedup |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 10 | 9 | $0.015 \pm 0.009$ | $0.026 \pm 0.012$ | 36 | $0.018 \pm 0.002$ | $0.030 \pm 0.002$ | Prim 0.60x |
-| 50 | 245 | $0.110 \pm 0.007$ | $0.218 \pm 0.005$ | 980 | $0.315 \pm 0.029$ | $0.314 \pm 0.005$ | **Crossover (1.0x)** |
-| 100 | 990 | $0.426 \pm 0.030$ | $0.569 \pm 0.016$ | 3,960 | $1.537 \pm 0.137$ | $0.934 \pm 0.034$ | **Prim 1.64x** |
-| 200 | 3,980 | $2.432 \pm 0.722$ | $2.055 \pm 0.462$ | 15,920 | $6.836 \pm 0.903$ | $3.012 \pm 0.147$ | **Prim 2.27x** |
+| 10 | 9 | $0.015 \pm 0.009$ | $0.025 \pm 0.012$ | 36 | $0.018 \pm 0.003$ | $0.031 \pm 0.003$ | Prim 0.58x |
+| 50 | 245 | $0.112 \pm 0.008$ | $0.220 \pm 0.003$ | 980 | $0.339 \pm 0.036$ | $0.315 \pm 0.009$ | **Crossover (1.08x)** |
+| 100 | 990 | $0.430 \pm 0.038$ | $0.572 \pm 0.022$ | 3,960 | $1.674 \pm 0.237$ | $0.965 \pm 0.058$ | **Prim 1.73x** |
+| 200 | 3,980 | $1.627 \pm 0.124$ | $1.549 \pm 0.163$ | 15,920 | $6.980 \pm 0.652$ | $3.176 \pm 0.238$ | **Prim 2.20x** |
 
 *Finding*: On sparse graphs ($d=0.20$), Kruskal is faster than Prim up to $|V| \approx 150$; at $|V| = 200$ sparse, Prim ($2.06\,\text{ms}$) was slightly faster than Kruskal ($2.43\,\text{ms}$) with overlapping std. On dense graphs ($d=0.80$), a clear crossover occurs at $|V|=50$, beyond which Prim's $\mathcal{O}(E \log V)$ dominates Kruskal's $\mathcal{O}(E \log E)$ edge-sorting ($2.27\times$ faster at $|V|=200$). *(Full data: `mst_runtime_comparison.csv`)*.
 
 #### Table 2: Shortest Path Routing Runtime: SSSP & APSP (Mean ± Std over 10 Repeats)
-| Nodes $\|V\|$ | Dijkstra SSSP (ms) | Bellman-Ford (ms) | SSSP Speedup | Rep. Dijkstra Sparse (ms) | Floyd-Warshall Sparse (ms) | APSP Speedup |
+| Nodes $|V|$ | Dijkstra SSSP (ms) | Bellman-Ford (ms) | SSSP Speedup | Rep. Dijkstra Sparse (ms) | Floyd-Warshall Sparse (ms) | APSP Speedup |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 10 | $0.022 \pm 0.007$ | $0.018 \pm 0.003$ | BF 1.22x | $0.196 \pm 0.009$ | $0.112 \pm 0.007$ | FW 1.75x |
-| 25 / 35 | $0.114 \pm 0.011$ | $0.158 \pm 0.006$ | **Dijkstra 1.39x** | $1.813 \pm 0.025$ | $1.891 \pm 0.034$ | **Tied (~1.0x)** |
-| 50 / 60 | $0.188 \pm 0.006$ | $0.449 \pm 0.019$ | **Dijkstra 2.39x** | $14.276 \pm 0.099$ | $30.818 \pm 0.480$ | **RD 2.16x** |
-| 100 / 80 | $0.511 \pm 0.044$ | $1.518 \pm 0.090$ | **Dijkstra 2.97x** | $29.582 \pm 0.633$ | $77.847 \pm 2.445$ | **RD 2.63x** |
+| 10 | $0.028 \pm 0.011$ | $0.022 \pm 0.004$ | BF 1.27x | $0.199 \pm 0.007$ | $0.112 \pm 0.005$ | FW 1.78x |
+| 25 / 35 | $0.110 \pm 0.015$ | $0.158 \pm 0.013$ | **Dijkstra 1.44x** | $1.778 \pm 0.116$ | $1.963 \pm 0.234$ | **RD 1.10x** |
+| 50 / 60 | $0.184 \pm 0.002$ | $0.444 \pm 0.010$ | **Dijkstra 2.41x** | $14.720 \pm 0.259$ | $32.403 \pm 0.858$ | **RD 2.20x** |
+| 100 / 80 | $0.505 \pm 0.023$ | $1.562 \pm 0.122$ | **Dijkstra 3.09x** | $33.097 \pm 2.784$ | $89.706 \pm 8.388$ | **RD 2.71x** |
 
 *Finding*: Dijkstra with our custom `MinHeap` steadily widens its advantage over Bellman-Ford, reaching nearly $3\times$ speedup at $|V|=100$. For APSP, Repeated Dijkstra outperforms Floyd-Warshall for $|V| \ge 40$ on sparse graphs ($1.58\times$ to $2.63\times$ faster) and for $|V| \ge 60$ on dense graphs ($1.38\times$ to $1.51\times$). We hypothesize that Floyd-Warshall's triple loop performing $V^3$ nested dictionary lookups incurs high bytecode and hash-table overhead in CPython; note this is an unmeasured hypothesis regarding interpreter dynamics. *(Full data: `sssp_runtime_comparison.csv`, `apsp_runtime_comparison.csv`)*.
 
@@ -186,16 +186,16 @@ All experimental benchmarks were conducted on Python 3.14 (Windows 11, [FILL IN:
 #### Table 3: Placement Strategy Comparison Across Capacity Multipliers (Mean ± Std over 10 Seeds)
 | Cap Mult | Lower Bound Objective | Knapsack DP Gap to LB (%) | Greedy Rounds Gap to LB (%) | Spill-Over Greedy Gap to LB (%) | Random Placement Gap to LB (%) | DP Unplaced Tasks | Fleet Utilization |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 0.25x | $557,414 \pm 88,608$ | $+32.52 \pm 12.76\%^*$ | $+33.39 \pm 12.31\%$ | $+34.37 \pm 13.08\%$ | $+47.27 \pm 10.55\%$ | $13.2 \pm 1.9$ | $73.4\% \pm 5.4\%$ |
+| 0.25x | $557,414 \pm 88,608$ | $+32.41 \pm 12.71\%^*$ | $+33.39 \pm 12.31\%$ | $+34.37 \pm 13.08\%$ | $+47.27 \pm 10.55\%$ | $13.2 \pm 1.9$ | $73.4\% \pm 5.4\%$ |
 | 0.50x | $557,414 \pm 88,608$ | $+20.80 \pm 6.05\%$ | $+20.38 \pm 6.39\%$ | $+22.14 \pm 6.34\%$ | $+45.51 \pm 13.36\%$ | $0.1 \pm 0.3$ | $68.8\% \pm 4.3\%$ |
-| 1.00x | $557,414 \pm 88,608$ | **$+6.41 \pm 2.92\%$** | **$+6.37 \pm 2.95\%$** | $+7.18 \pm 3.12\%$ | $+43.08 \pm 11.27\%$ | $0.0$ | $34.4\% \pm 2.4\%$ |
+| 1.00x | $557,414 \pm 88,608$ | **$+6.41 \pm 2.92\%$** | **$+6.37 \pm 2.94\%$** | $+7.18 \pm 3.12\%$ | $+43.08 \pm 11.27\%$ | $0.0$ | $34.4\% \pm 2.4\%$ |
 | 2.00x | $557,414 \pm 88,608$ | $+1.74 \pm 0.99\%$ | $+1.75 \pm 1.01\%$ | $+2.39 \pm 1.05\%$ | $+43.02 \pm 8.42\%$ | $0.0$ | $17.2\% \pm 1.2\%$ |
 
-*\* At 0.25x capacity, an average of 13.2 tasks could not fit. The reported gap reflects the increase in placed client access latency relative to the lower bound ($25.27\,\text{ms}$ vs $19.24\,\text{ms}$). Full data: `placement_capacity_sensitivity.csv`.*
+*\* At 0.25x capacity, an average of 13.2 tasks could not fit. The reported gap reflects the increase in placed client access latency relative to the lower bound ($25.24\,\text{ms}$ vs $19.24\,\text{ms}$, $+32.41\%$). Full data: `placement_capacity_sensitivity.csv`.*
 
 *Empirical Findings*:
-1. **Knapsack DP and Greedy Rounds Are Statistically Indistinguishable**: Across all capacity levels, Knapsack DP and Greedy Rounds achieve virtually tied solution quality ($6.41\%$ vs $6.37\%$ at $1.0\times$; $1.74\%$ vs $1.75\%$ at $2.0\times$). In our multi-round bidding loop, each server receives 2–5 proposals per round, making greedy ratio choices closely mirror 0-1 knapsack selections.
-2. **Both Multi-Round Schedulers Outperform Spill-Over Greedy**: Coordinated regret-based bidding prevents high-traffic tasks from greedily occupying servers required by low-traffic tasks, beating Spill-Over Greedy ($7.18\%$ at $1.0\times$, $2.39\%$ at $2.0\times$).
+1. **Knapsack DP and Greedy Rounds Are Statistically Indistinguishable**: Across all capacity levels, Knapsack DP and Greedy Rounds achieve virtually tied solution quality ($6.41\%$ vs $6.37\%$ at $1.0\times$; $1.74\%$ vs $1.75\%$ at $2.0\times$). In our multi-round bidding loop, only a small subset of candidate tasks competes for any given server in each round (typically 1 to 4 competing proposals per active server, median 2), making greedy ratio choices closely mirror 0-1 knapsack selections.
+2. **Both Multi-Round Schedulers Outperform Spill-Over Greedy**: Coordinated regret-based bidding prevents high-traffic tasks from greedily occupying servers required by low-traffic tasks, beating Spill-Over Greedy on most seeds ($7.18\%$ vs $6.41\%$ at $1.0\times$, $2.39\%$ vs $1.74\%$ at $2.0\times$; DP beats Spill-Over on 9 of 10 seeds at $1.0\times$ capacity, and 8 of 10 seeds at $0.75\times$).
 3. **Random Placement Shows No Adaptation**: Random placement incurs an optimality gap of $43\%$ to $47\%$ across all capacity levels. Expanding capacity does not improve random placement ($45.51\%$ at $0.5\times \rightarrow 43.02\%$ at $2.0\times$) because it ignores network topology and shortest paths.
 
 ---
@@ -253,19 +253,19 @@ All experimental benchmarks were conducted on Python 3.14 (Windows 11, [FILL IN:
 - **Dense Networks ($d \ge 0.80$)**: Prim with a min-heap is faster for $|V| \ge 100$ ($0.93\,\text{ms}$ vs $1.54\,\text{ms}$ at $|V| = 100$; $3.01\,\text{ms}$ vs $6.84\,\text{ms}$ at $|V| = 200$, a **$2.3\times$ speedup**), as Kruskal's $\mathcal{O}(E \log E)$ edge-sorting dominates when $|E| \approx 16,000$.
 
 ### 10.2 Floyd-Warshall vs. Repeated Dijkstra for Routing Matrices
-- **Sparse Topologies**: Repeated Dijkstra with our pure-Python `MinHeap` runs in $\mathcal{O}(V(V+E) \log V)$ and is **$2.63\times$ faster** than Floyd-Warshall at $|V| = 80$ ($29.58\,\text{ms}$ vs $77.85\,\text{ms}$).
-- **Dense Topologies**: The ratio narrows to $1.51\times$ at $|V| = 80$ ($56.74\,\text{ms}$ vs $85.66\,\text{ms}$). Even on dense graphs where Floyd-Warshall is asymptotically $\mathcal{O}(V^3)$ vs Repeated Dijkstra $\mathcal{O}(V^3 \log V)$, Repeated Dijkstra remains faster in CPython. Both implementations are written from scratch in pure Python. We hypothesize that Floyd-Warshall's triple loop performing $V^3 = 512,000$ iterations over nested dictionary lookups (`dist[i][k] + dist[k][j]`) incurs substantial constant-factor bytecode dispatch and hash-table overhead in CPython; note that this is an unmeasured hypothesis regarding interpreter dynamics. At small sizes ($|V| = 10$), Floyd-Warshall is faster ($0.112\,\text{ms}$ vs $0.196\,\text{ms}$) due to zero heap allocation overhead.
+- **Sparse Topologies**: Repeated Dijkstra with our pure-Python `MinHeap` runs in $\mathcal{O}(V(V+E) \log V)$ and is **$2.71\times$ faster** than Floyd-Warshall at $|V| = 80$ ($33.10\,\text{ms}$ vs $89.71\,\text{ms}$).
+- **Dense Topologies**: The ratio narrows to $1.56\times$ at $|V| = 80$ ($59.47\,\text{ms}$ vs $93.00\,\text{ms}$). Even on dense graphs where Floyd-Warshall is asymptotically $\mathcal{O}(V^3)$ vs Repeated Dijkstra $\mathcal{O}(V^3 \log V)$, Repeated Dijkstra remains faster in CPython. Both implementations are written from scratch in pure Python. We hypothesize that Floyd-Warshall's triple loop performing $V^3 = 512,000$ iterations over nested dictionary lookups (`dist[i][k] + dist[k][j]`) incurs substantial constant-factor bytecode dispatch and hash-table overhead in CPython; note that this is an unmeasured hypothesis regarding interpreter dynamics. At small sizes ($|V| = 10$), Floyd-Warshall is faster ($0.112\,\text{ms}$ vs $0.199\,\text{ms}$) due to zero heap allocation overhead.
 
 ### 10.3 0-1 Knapsack DP vs. Greedy Rounds
-Across all experimental sweeps, Iterative Knapsack DP and Iterative Greedy Rounds are statistically indistinguishable ($6.41\% \pm 2.92\%$ vs $6.37\% \pm 2.95\%$ at $1.0\times$ capacity; $1.74\% \pm 0.99\%$ vs $1.75\% \pm 1.01\%$ at $2.0\times$). In our multi-round architecture, 0-1 Knapsack DP is exact only per server per round on the local regret benefit, not globally across the entire fleet assignment. Because each server receives small sets of competing proposals per round (typically 2–5 tasks), sorting by greedy regret-to-demand ratio yields essentially identical assignment decisions as exact local 0-1 knapsack branches. Both multi-round bidding models outperform uncoordinated Spill-Over Greedy ($7.18\% \pm 3.12\%$) by using cross-server opportunity regret to coordinate which tasks claim congested servers.
+Across all experimental sweeps, Iterative Knapsack DP and Iterative Greedy Rounds are statistically indistinguishable ($6.41\% \pm 2.92\%$ vs $6.37\% \pm 2.94\%$ at $1.0\times$ capacity; $1.74\% \pm 0.99\%$ vs $1.75\% \pm 1.01\%$ at $2.0\times$). In our multi-round architecture, 0-1 Knapsack DP is exact only per server per round on the local regret benefit, not globally across the entire fleet assignment. Because each server receives small sets of competing proposals per round (typically 1 to 4 tasks, median 2), sorting by greedy regret-to-demand ratio yields essentially identical assignment decisions as exact local 0-1 knapsack branches. Both multi-round bidding models outperform uncoordinated Spill-Over Greedy ($7.18\% \pm 3.12\%$) by using cross-server opportunity regret to coordinate which tasks claim congested servers.
 
 ---
 
 ## 11. Engineering Policy Recommendations
 
-1. **Precomputing Routing Tables via Repeated Dijkstra**: At small sizes ($|V| \le 10$), Floyd-Warshall is faster ($0.57\times$ to $0.72\times$ runtime of RD), with parity at $|V| = 25$ ($\sim 1.0\times$). Repeated Dijkstra with custom `MinHeap` is superior for **$|V| \ge 40$ on sparse graphs** ($1.58\times$ at $|V|=40 \rightarrow 2.63\times$ at $|V|=80$) and **$|V| \ge 60$ on dense graphs** ($1.38\times$ at $|V|=60 \rightarrow 1.51\times$ at $|V|=80$). We recommend Repeated Dijkstra for medium and large datacenter networks.
+1. **Precomputing Routing Tables via Repeated Dijkstra**: At small sizes ($|V| \le 10$), Floyd-Warshall is faster ($0.56\times$ to $0.72\times$ runtime of RD), with parity at $|V| = 25$ ($\sim 1.0\times$ to $1.1\times$). Repeated Dijkstra with custom `MinHeap` is superior for **$|V| \ge 40$ on sparse graphs** ($1.64\times$ at $|V|=40 \rightarrow 2.71\times$ at $|V|=80$) and **$|V| \ge 60$ on dense graphs** ($1.38\times$ at $|V|=60 \rightarrow 1.56\times$ at $|V|=80$). We recommend Repeated Dijkstra for medium and large datacenter networks.
 2. **Deploy an MST-Derived Replication Hub with Balanced $\lambda$**: Designate the traffic-weighted median server along the MST backbone as the central sync hub. Operators can tune the empirical trade-off: $\lambda = 1.0$ yields **$11.2\%$ sync reduction** ($111.2 \rightarrow 98.8$) with $+0.05\%$ access latency ($18.23 \rightarrow 18.24\,\text{ms}$); $\lambda = 10.0$ yields **$48.2\%$ sync reduction** ($57.6$) with $+1.4\%$ latency ($18.49\,\text{ms}$); $\lambda = 25.0$ yields **$71.0\%$ sync reduction** ($32.2$) with $+3.9\%$ latency ($18.94\,\text{ms}$), plateauing toward the $-78.6\%$ limit ($23.8$ at $\lambda=200$).
-3. **Use Regret-Based Proposal Scheduling**: Multi-round regret bidding consistently beats simple spill-over scheduling by ensuring tasks facing high displacement penalties secure appropriate hosts first.
+3. **Use Regret-Based Proposal Scheduling**: Multi-round regret bidding beats simple spill-over scheduling on most seeds (e.g., DP beats Spill-Over Greedy on 9 of 10 seeds at $1.0\times$ capacity, and 8 of 10 seeds at $0.75\times$) by ensuring tasks facing high displacement penalties secure appropriate hosts first.
 4. **Capacity Provisioning & Fleet Sizing**: The multiplier scales raw server capacities. Baseline sizing ($1.0\times$) yields **$34.4\% \pm 2.4\%$** fleet utilization. Scaling to $0.50\times$ raises utilization to $68.8\%$ with $+20.80\%$ latency gap; $0.25\times$ causes saturation with $13.2$ dropped tasks. Fleets should be provisioned at $\ge 1.0\times$ to maintain gaps below $6.5\%$ and zero drops.
 
 ---
@@ -274,7 +274,7 @@ Across all experimental sweeps, Iterative Knapsack DP and Iterative Greedy Round
 
 We designed, implemented, and evaluated a from-scratch Python **Cloud Task Placement Suite** uniting Greedy MSTs, Shortest Paths, and 0-1 Knapsack DP:
 - **Iterative Regret Coordination**: Replaced single-server greedy placement with iterative multi-round regret bidding and MST sync hub optimization.
-- **Latency Improvements**: Placement achieves **$23.3\%$ to $28.1\%$ latency reduction** vs random placement at capacity $\ge 0.75\times$. While random placement is **$41\%$ to $46\%$ above the lower bound**, iterative knapsack DP stays within **$1.7\%$ to $6.4\%$** of the theoretical lower bound for capacity $\ge 1.0\times$.
+- **Latency Improvements**: Placement achieves **$23.3\%$ to $28.1\%$ latency reduction** vs random placement at capacity $\ge 0.75\times$. While random placement is **$42.9\%$ to $45.3\%$ above the lower bound** ($42.3\%$ to $44.6\%$ in access latency), iterative knapsack DP stays within **$1.7\%$ to $6.4\%$** of the theoretical lower bound for capacity $\ge 1.0\times$.
 - **Validation & Delivery**: Full test suite passing against NetworkX and exact brute-force benchmarks, plus an interactive self-contained Jupyter notebook dashboard.
 - **Future Directions**: Multi-resource vector bin packing ($\langle \text{CPU}, \text{RAM}, \text{GPU} \rangle$), dynamic online task arrivals, and resilient failover routing planes via Yen's $k$-shortest paths.
 

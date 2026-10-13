@@ -921,6 +921,82 @@ def plot_mst_backbone_topology() -> None:
     output_path = os.path.join(RESULTS_DIR, "mst_backbone_topology.png")
     plt.savefig(output_path, dpi=300)
     plt.close()
+def plot_placement_sensitivity_combined(
+    cap_res: List[Dict[str, Any]],
+    task_res: List[Dict[str, Any]],
+    lambda_res: List[Dict[str, Any]],
+) -> None:
+    """Generates a 4-panel combined placement sensitivity figure for publication/report."""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+    # Panel (0, 0): Latency vs Capacity
+    mults = [float(r["capacity_multiplier"]) for r in cap_res]
+    styles = {
+        "unconstrained_lower_bound": ("k--", "x", "Lower Bound", "#333333"),
+        "iterative_knapsack_dp": ("-", "o", "Knapsack DP", "#2ca02c"),
+        "iterative_knapsack_greedy": ("--", "s", "Greedy Rounds", "#1f77b4"),
+        "spillover_greedy": ("-.", "^", "Spill-Over Greedy", "#ff7f0e"),
+        "random_placement": (":", "v", "Random Placement", "#d62728"),
+    }
+    for strat, (ls, marker, label, color) in styles.items():
+        means = [float(r[f"{strat}_access_latency_mean"]) for r in cap_res]
+        stds = [float(r[f"{strat}_access_latency_std"]) for r in cap_res]
+        axes[0, 0].errorbar(mults, means, yerr=stds, fmt=f"{marker}{ls}", capsize=3, label=label, color=color, linewidth=1.8)
+    axes[0, 0].set_title("(A) Client Access Latency vs Server Capacity", fontsize=11, fontweight="bold")
+    axes[0, 0].set_xlabel("Capacity Multiplier", fontsize=10)
+    axes[0, 0].set_ylabel("Access Latency (ms)", fontsize=10)
+    axes[0, 0].legend(fontsize=8, loc="upper right")
+    axes[0, 0].grid(True, linestyle="--", alpha=0.5)
+
+    # Panel (0, 1): Gap vs Capacity
+    for strat in ["iterative_knapsack_dp", "iterative_knapsack_greedy", "spillover_greedy", "random_placement"]:
+        _, marker, label, color = styles[strat]
+        means = [float(r[f"{strat}_gap_to_lb_obj_pct_mean"]) for r in cap_res]
+        stds = [float(r[f"{strat}_gap_to_lb_obj_pct_std"]) for r in cap_res]
+        axes[0, 1].errorbar(mults, means, yerr=stds, fmt=f"{marker}-", capsize=3, label=label, color=color, linewidth=1.8)
+    axes[0, 1].set_title("(B) Optimality Gap to Lower Bound vs Server Capacity", fontsize=11, fontweight="bold")
+    axes[0, 1].set_xlabel("Capacity Multiplier", fontsize=10)
+    axes[0, 1].set_ylabel("Objective Gap to LB (%)", fontsize=10)
+    axes[0, 1].legend(fontsize=8, loc="upper right")
+    axes[0, 1].grid(True, linestyle="--", alpha=0.5)
+
+    # Panel (1, 0): Workload Tasks Scaling
+    tasks = [int(r["num_tasks"]) for r in task_res]
+    for strat in styles:
+        ls, marker, label, color = styles[strat]
+        means = [float(r[f"{strat}_obj_mean"]) for r in task_res]
+        stds = [float(r[f"{strat}_obj_std"]) for r in task_res]
+        axes[1, 0].errorbar(tasks, means, yerr=stds, fmt=f"{marker}{ls}", capsize=3, label=label, color=color, linewidth=1.8)
+    axes[1, 0].set_title("(C) Composite Objective Cost vs Workload Tasks", fontsize=11, fontweight="bold")
+    axes[1, 0].set_xlabel("Number of Tasks (|T|)", fontsize=10)
+    axes[1, 0].set_ylabel("Total Composite Cost", fontsize=10)
+    axes[1, 0].legend(fontsize=8, loc="upper left")
+    axes[1, 0].grid(True, linestyle="--", alpha=0.5)
+
+    # Panel (1, 1): Lambda Trade-off
+    lams = [float(r["lambda_sync"]) for r in lambda_res]
+    ax4 = axes[1, 1]
+    ax4_twin = ax4.twinx()
+    acc_m = [float(r["iterative_knapsack_dp_lat_mean"]) for r in lambda_res]
+    acc_s = [float(r["iterative_knapsack_dp_lat_std"]) for r in lambda_res]
+    sync_m = [float(r["iterative_knapsack_dp_sync_mean"]) for r in lambda_res]
+    sync_s = [float(r["iterative_knapsack_dp_sync_std"]) for r in lambda_res]
+    l1 = ax4.errorbar(lams, acc_m, yerr=acc_s, fmt="o-", color="#1f77b4", capsize=3, linewidth=2, label="Access Latency (ms)")
+    l2 = ax4_twin.errorbar(lams, sync_m, yerr=sync_s, fmt="s--", color="#d62728", capsize=3, linewidth=2, label="MST Sync Cost")
+    ax4.set_xscale("symlog", linthresh=1.0)
+    ax4.set_title("(D) Access Latency vs MST Replication Sync Cost", fontsize=11, fontweight="bold")
+    ax4.set_xlabel("Replication Weight (\u03bb, log scale)", fontsize=10)
+    ax4.set_ylabel("Access Latency (ms)", color="#1f77b4", fontsize=10)
+    ax4_twin.set_ylabel("MST Replication Sync Cost", color="#d62728", fontsize=10)
+    lines = [l1, l2]
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc="center right", fontsize=8)
+    ax4.grid(True, linestyle="--", alpha=0.5)
+
+    plt.tight_layout()
+    output_path = os.path.join(RESULTS_DIR, "placement_sensitivity_combined.png")
+    plt.savefig(output_path, dpi=300)
+    plt.close()
     print(f"Generated Plot: {output_path}")
 
 
@@ -952,6 +1028,7 @@ def main():
     plot_latency_vs_capacity(cap_res)
     plot_placement_sensitivity_tasks(task_res)
     plot_placement_sensitivity_lambda(lambda_res)
+    plot_placement_sensitivity_combined(cap_res, task_res, lambda_res)
     plot_mst_backbone_topology()
 
     print("\n[DONE] All experiments, statistical aggregations, and plots completed successfully!")

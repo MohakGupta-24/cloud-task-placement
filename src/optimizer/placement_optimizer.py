@@ -140,8 +140,9 @@ class CloudPlacementOptimizer:
         # Weighted median node: minimizes sum of w_v * D_MST(v, hub)
         # Node weight w_v represents total traffic originating at client node v
         node_weights: Dict[int, float] = {n: 1.0 for n in nodes}
-        for task in self.tasks:
-            for client, req in task.client_requests.items():
+        for task in sorted(self.tasks, key=lambda t: t.task_id):
+            for client in sorted(task.client_requests.keys()):
+                req = task.client_requests[client]
                 node_weights[client] = node_weights.get(client, 1.0) + req
 
         best_hub = nodes[0]
@@ -181,8 +182,8 @@ class CloudPlacementOptimizer:
         """
         total_traffic = task.total_requests or 1.0
         weighted_access_delay = sum(
-            req * dist_matrix[client][server]
-            for client, req in task.client_requests.items()
+            task.client_requests[client] * dist_matrix[client][server]
+            for client in sorted(task.client_requests.keys())
         )
         per_req_lat = weighted_access_delay / total_traffic
 
@@ -211,7 +212,8 @@ class CloudPlacementOptimizer:
 
         server_used_cap: Dict[int, int] = {n: 0 for n in nodes}
 
-        for task_id, server in assignments.items():
+        for task_id in sorted(assignments.keys()):
+            server = assignments[task_id]
             task = self.task_map[task_id]
             server_used_cap[server] += task.demand
             per_lat, sync, comp = self._task_server_cost(
@@ -261,7 +263,7 @@ class CloudPlacementOptimizer:
 
         # Precompute costs for all (task, server)
         cost_cache: Dict[str, Dict[int, float]] = {}
-        for task in self.tasks:
+        for task in sorted(self.tasks, key=lambda t: t.task_id):
             cost_cache[task.task_id] = {
                 s: self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2]
                 for s in nodes
@@ -276,15 +278,15 @@ class CloudPlacementOptimizer:
             server_proposals: Dict[int, List[PlacementOption]] = {s: [] for s in nodes}
             proposals_count = 0
 
-            for t_id in list(unplaced):
+            for t_id in sorted(unplaced):
                 task = self.task_map[t_id]
                 # Feasible servers with room for task demand
                 feasible = [s for s in nodes if rem_cap[s] >= task.demand]
                 if not feasible:
                     continue
 
-                # Sort feasible servers by cost ascending
-                feasible.sort(key=lambda s: cost_cache[t_id][s])
+                # Sort feasible servers by cost ascending, tie-break by server id
+                feasible.sort(key=lambda s: (cost_cache[t_id][s], s))
                 best_server = feasible[0]
                 best_cost = cost_cache[t_id][best_server]
 
@@ -336,7 +338,7 @@ class CloudPlacementOptimizer:
                 # Deadlock: proposals made but none could be accepted
                 break
 
-        return assignments, sorted(list(unplaced))
+        return assignments, sorted(unplaced)
 
     def _run_spillover_greedy(
         self,
@@ -350,8 +352,8 @@ class CloudPlacementOptimizer:
         assignments: Dict[str, int] = {}
         unplaced: List[str] = []
 
-        # Sort tasks descending by client traffic
-        sorted_tasks = sorted(self.tasks, key=lambda t: t.total_requests, reverse=True)
+        # Sort tasks descending by client traffic, tie-break by task_id ascending
+        sorted_tasks = sorted(self.tasks, key=lambda t: (-t.total_requests, t.task_id))
 
         for task in sorted_tasks:
             feasible = [s for s in nodes if rem_cap[s] >= task.demand]
@@ -359,10 +361,10 @@ class CloudPlacementOptimizer:
                 unplaced.append(task.task_id)
                 continue
 
-            # Pick feasible server with minimum composite cost
+            # Pick feasible server with minimum composite cost, tie-break by server id
             best_server = min(
                 feasible,
-                key=lambda s: self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2],
+                key=lambda s: (self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2], s),
             )
             assignments[task.task_id] = best_server
             rem_cap[best_server] -= task.demand
@@ -383,7 +385,7 @@ class CloudPlacementOptimizer:
         assignments: Dict[str, int] = {}
         unplaced: List[str] = []
 
-        tasks_shuffled = list(self.tasks)
+        tasks_shuffled = sorted(self.tasks, key=lambda t: t.task_id)
         rng.shuffle(tasks_shuffled)
 
         for task in tasks_shuffled:
@@ -408,10 +410,10 @@ class CloudPlacementOptimizer:
         nodes = self.graph.get_nodes()
         assignments: Dict[str, int] = {}
 
-        for task in self.tasks:
+        for task in sorted(self.tasks, key=lambda t: t.task_id):
             best_server = min(
                 nodes,
-                key=lambda s: self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2],
+                key=lambda s: (self._task_server_cost(task, s, dist_matrix, mst_dist_matrix, sync_hub)[2], s),
             )
             assignments[task.task_id] = best_server
 
@@ -425,7 +427,8 @@ class CloudPlacementOptimizer:
     ) -> Optional[StrategyMetrics]:
         """Exhaustive brute-force assignment solver for tiny benchmark instances (<= 7 tasks, <= 6 servers)."""
         nodes = self.graph.get_nodes()
-        k = len(self.tasks)
+        sorted_tasks = sorted(self.tasks, key=lambda t: t.task_id)
+        k = len(sorted_tasks)
         m = len(nodes)
 
         # Guard against combinatorial explosion
@@ -435,10 +438,10 @@ class CloudPlacementOptimizer:
 
         capacities = {s: int(self.graph.get_capacity(s)) for s in nodes}
         cost_lookup = [
-            {s: self._task_server_cost(self.tasks[i], s, dist_matrix, mst_dist_matrix, sync_hub)[2] for s in nodes}
+            {s: self._task_server_cost(sorted_tasks[i], s, dist_matrix, mst_dist_matrix, sync_hub)[2] for s in nodes}
             for i in range(k)
         ]
-        demands = [self.tasks[i].demand for i in range(k)]
+        demands = [sorted_tasks[i].demand for i in range(k)]
 
         best_assignment: Dict[str, int] = {}
         best_placed_count = -1
@@ -466,9 +469,9 @@ class CloudPlacementOptimizer:
             if placed_count > best_placed_count or (placed_count == best_placed_count and total_comp < best_objective):
                 best_placed_count = placed_count
                 best_objective = total_comp
-                best_assignment = {self.tasks[i].task_id: combo[i] for i in range(k) if combo[i] is not None}
+                best_assignment = {sorted_tasks[i].task_id: combo[i] for i in range(k) if combo[i] is not None}
 
-        unplaced = [t.task_id for t in self.tasks if t.task_id not in best_assignment]
+        unplaced = [t.task_id for t in sorted_tasks if t.task_id not in best_assignment]
         return self._evaluate_assignments(
             strategy_name="brute_force_optimal",
             assignments=best_assignment,
@@ -540,7 +543,7 @@ class CloudPlacementOptimizer:
         cost_benefit_table: List[PlacementDecision] = []
 
         server_alloc: Dict[int, List[str]] = {n: [] for n in nodes}
-        for t_id, s in asgn_dp.items():
+        for t_id, s in sorted(asgn_dp.items()):
             server_alloc[s].append(t_id)
 
         for s in nodes:
